@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature android:name="android.hardware.telephony" android:required="true"/>
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+    <uses-permission android:name="android.permission.READ_SMS"/>
+    <uses-permission android:name="android.permission.RECEIVE_SMS"/>
+    <uses-permission android:name="android.permission.SEND_SMS"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <queries><intent><action android:name="android.provider.Telephony.SMS_DELIVER"/></intent></queries>
+    <application android:allowBackup="false" android:fullBackupContent="false" android:usesCleartextTraffic="false"
+        android:label="SimpleSMS" android:icon="@drawable/ic_launcher" android:theme="@style/BugleTheme.ConversationListActivity">
+        <activity android:name=".ui.conversationlist.ConversationListActivity" android:exported="true" android:launchMode="singleTop">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/><category android:name="android.intent.category.APP_MESSAGING"/></intent-filter>
+        </activity>
+        <activity android:name=".ui.conversationlist.ArchivedConversationListActivity" android:exported="false" android:theme="@style/BugleTheme.ArchivedConversationListActivity"/>
+        <activity android:name=".ui.conversation.ConversationActivity" android:exported="true" android:launchMode="singleTop" android:theme="@style/BugleTheme.ConversationActivity">
+            <intent-filter><action android:name="android.intent.action.SENDTO"/><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="sms"/><data android:scheme="smsto"/><data android:scheme="mms"/><data android:scheme="mmsto"/></intent-filter>
+        </activity>
+        <activity android:name=".ui.appsettings.ApplicationSettingsActivity" android:exported="false" android:theme="@style/BugleTheme.SettingsActivity"/>
+        <activity android:name=".ui.conversationsettings.PeopleAndOptionsActivity" android:exported="false"/>
+        <receiver android:name=".sms.SmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS"><intent-filter><action android:name="android.provider.Telephony.SMS_DELIVER"/></intent-filter></receiver>
+        <receiver android:name=".sms.MmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_WAP_PUSH"><intent-filter><action android:name="android.provider.Telephony.WAP_PUSH_DELIVER"/><data android:mimeType="application/vnd.wap.mms-message"/></intent-filter></receiver>
+        <receiver android:name=".sms.SendStatusReceiver" android:exported="false"/>
+        <receiver android:name=".sms.DeliveryStatusReceiver" android:exported="false"/>
+        <service android:name=".sms.RespondViaMessageService" android:exported="true" android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE">
+            <intent-filter><action android:name="android.intent.action.RESPOND_VIA_MESSAGE"/><category android:name="android.intent.category.DEFAULT"/><data android:scheme="sms"/><data android:scheme="smsto"/><data android:scheme="mms"/><data android:scheme="mmsto"/></intent-filter>
+        </service>
+    </application>
+</manifest>

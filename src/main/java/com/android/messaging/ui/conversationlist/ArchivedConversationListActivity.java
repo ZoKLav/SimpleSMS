@@ -1,0 +1,1 @@
+package com.android.messaging.ui.conversationlist; public final class ArchivedConversationListActivity extends AbstractConversationListActivity { @Override protected boolean archived(){return true;} }

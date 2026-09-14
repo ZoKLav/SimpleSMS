@@ -1,0 +1,1 @@
+package com.android.messaging.ui.conversation; import android.content.Context;import android.util.AttributeSet;import android.widget.LinearLayout;public class ComposeMessageView extends LinearLayout{public ComposeMessageView(Context c,AttributeSet a){super(c,a);}}

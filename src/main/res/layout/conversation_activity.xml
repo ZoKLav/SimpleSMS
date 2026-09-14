@@ -1,0 +1,9 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/conversation_root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@color/conversation_background">
+    <LinearLayout android:id="@+id/recipient_container" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingStart="16dp" android:paddingEnd="8dp" android:visibility="gone" android:background="#FFFFFFFF">
+        <TextView android:id="@+id/recipient_to_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="To" android:textColor="@color/conversation_list_details" android:layout_marginEnd="8dp"/>
+        <AutoCompleteTextView android:id="@+id/recipient_text_view" android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1" android:singleLine="true" android:hint="Enter name or number" android:background="@null" android:inputType="phone"/>
+        <Button android:id="@+id/pick_contact" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Contacts" android:textAllCaps="false"/>
+    </LinearLayout>
+    <android.support.v7.widget.RecyclerView android:id="@+id/message_list" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:paddingTop="16dp" android:paddingBottom="8dp" android:clipToPadding="true"/>
+    <include layout="@layout/compose_message_view"/>
+</LinearLayout>

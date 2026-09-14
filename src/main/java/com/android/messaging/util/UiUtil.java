@@ -1,0 +1,3 @@
+package com.android.messaging.util;
+import android.content.Context;import android.graphics.Color;import android.graphics.drawable.GradientDrawable;
+public final class UiUtil {private UiUtil(){} public static int dp(Context c,float v){return Math.round(v*c.getResources().getDisplayMetrics().density);}public static int readable(int color){double l=(.299*Color.red(color)+.587*Color.green(color)+.114*Color.blue(color))/255d;return l>.62?Color.BLACK:Color.WHITE;}public static GradientDrawable circle(int color){GradientDrawable d=new GradientDrawable();d.setShape(GradientDrawable.OVAL);d.setColor(color);return d;}public static String hex(int c){return String.format("#%06X",0xffffff&c);} }

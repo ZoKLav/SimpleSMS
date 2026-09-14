@@ -1,0 +1,3 @@
+package com.android.messaging.sms;
+import android.app.Activity;import android.content.BroadcastReceiver;import android.content.ContentValues;import android.content.Context;import android.content.Intent;import android.net.Uri;import android.provider.Telephony;
+public final class DeliveryStatusReceiver extends BroadcastReceiver {@Override public void onReceive(Context c,Intent i){if(i==null||!SmsSender.DELIVERED.equals(i.getAction()))return;String raw=i.getStringExtra(SmsSender.URI);if(raw==null)return;ContentValues v=new ContentValues();v.put(Telephony.Sms.STATUS,getResultCode()==Activity.RESULT_OK?Telephony.Sms.STATUS_COMPLETE:Telephony.Sms.STATUS_FAILED);try{c.getContentResolver().update(Uri.parse(raw),v,null,null);}catch(Exception ignored){}}}

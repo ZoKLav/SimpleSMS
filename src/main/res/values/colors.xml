@@ -1,0 +1,8 @@
+<resources>
+    <color name="action_bar_background_color">#039BE5</color><color name="action_bar_background_color_dark">#0277BD</color><color name="action_bar_title_text_color">#FFFFFFFF</color>
+    <color name="archived_conversation_action_bar_background_color">#607D8B</color><color name="archived_conversation_action_bar_background_color_dark">#455A64</color>
+    <color name="conversation_background">#EEEEEE</color><color name="conversation_list_name">#DE000000</color><color name="conversation_list_details">#8A000000</color>
+    <color name="message_bubble_color_incoming">#FFFFFF</color><color name="message_bubble_color_outgoing">#039BE5</color><color name="message_text_color_incoming">#DE000000</color><color name="message_text_color_outgoing">#FFFFFFFF</color>
+    <color name="timestamp_text_incoming">#8A000000</color><color name="timestamp_text_outgoing">#B3FFFFFF</color>
+    <color name="fab_color">#FFC107</color><color name="fab_pressed_color">#FFA000</color><color name="swipe_background">#ECEFF1</color><color name="settings_list_text_primary">#DE000000</color><color name="settings_list_text_secondary">#8A000000</color>
+</resources>
