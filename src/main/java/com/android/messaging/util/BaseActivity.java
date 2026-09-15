@@ -9,87 +9,80 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
-
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.support.v7.app.AppCompatActivity;
-
+import android.support.v7.view.ContextThemeWrapper;
+import android.support.v7.widget.Toolbar;
 import com.android.messaging.R;
 
-/**
- * Common activity behavior for SimpleSMS.
- *
- * Android 15/16 enforce edge-to-edge for modern targets. The legacy AOSP/Support-28
- * action-bar layout predates that behavior, so on API 35+ we explicitly inset the
- * entire AppCompat sub-decor inside the status/navigation bars. Nougat through
- * Android 14 keep the platform's original layout behavior.
- */
+/** One measured column owns the toolbar, screen content, and system insets. */
 public abstract class BaseActivity extends AppCompatActivity {
-    @Override
-    protected void attachBaseContext(Context base) {
+    private FrameLayout screen;
+
+    @Override protected void attachBaseContext(Context base) {
         int scale = AppPrefs.scale(base);
-        if (scale == 100) {
-            super.attachBaseContext(base);
-            return;
-        }
+        if (scale == 100) { super.attachBaseContext(base); return; }
         Configuration c = new Configuration(base.getResources().getConfiguration());
         c.densityDpi = Math.max(120, Math.round(c.densityDpi * (scale / 100f)));
         super.attachBaseContext(base.createConfigurationContext(c));
     }
 
-    @Override
-    protected void onCreate(Bundle b) {
+    @Override protected void onCreate(Bundle state) {
         setTheme(AppPrefs.isDark(this) ? R.style.BugleTheme_Dark : R.style.BugleTheme);
-        super.onCreate(b);
-        if (!AppPrefs.screenshots(this)) {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        super.onCreate(state);
+        if (!AppPrefs.screenshots(this)) getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        if (Build.VERSION.SDK_INT >= 30) {
+            getWindow().setDecorFitsSystemWindows(false);
+            getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
+            getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
+        }
+
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setBackgroundColor(AppPrefs.isDark(this) ? 0xff181b20 : 0xfff7f8fa);
+        Toolbar toolbar = new Toolbar(new ContextThemeWrapper(this, R.style.SimpleSMSToolbarTheme));
+        toolbar.setPopupTheme(AppPrefs.isDark(this)
+                ? R.style.SimpleSMSPopupThemeDark : R.style.SimpleSMSPopupThemeLight);
+        toolbar.setBackgroundColor(AppPrefs.accent(this));
+        toolbar.setTitleTextAppearance(this, R.style.BugleActionBarTitleTextStyle);
+        toolbar.setContentInsetsRelative(UiUtil.dp(this, 20), UiUtil.dp(this, 12));
+        toolbar.setMinimumHeight(UiUtil.dp(this, 64));
+        shell.addView(toolbar, new LinearLayout.LayoutParams(-1, -2));
+        screen = new FrameLayout(this);
+        shell.addView(screen, new LinearLayout.LayoutParams(-1, 0, 1));
+        super.setContentView(shell);
+        setSupportActionBar(toolbar);
+        // On older Android the window already resizes for system bars and the IME.
+        // On API 30+ consume insets once, outside BOTH toolbar and screen content.
+        if (Build.VERSION.SDK_INT >= 30) {
+            shell.setOnApplyWindowInsetsListener((v, insets) -> {
+                android.view.WindowInsetsController controller = v.getWindowInsetsController();
+                if (controller != null) {
+                    int lightBars = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                            | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                    controller.setSystemBarsAppearance(
+                            AppPrefs.isDark(this) ? 0 : lightBars, lightBars);
+                }
+                Insets safe = insets.getInsets(WindowInsets.Type.systemBars()
+                        | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
+                v.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+                return WindowInsets.CONSUMED;
+            });
+            shell.requestApplyInsets();
         }
     }
 
-    @Override
-    public void setContentView(int layoutResID) {
-        super.setContentView(layoutResID);
-        installModernSystemBarInsets();
+    @Override public void setContentView(int resource) {
+        screen.removeAllViews();
+        getLayoutInflater().inflate(resource, screen, true);
     }
-
-    @Override
-    public void setContentView(View view) {
-        super.setContentView(view);
-        installModernSystemBarInsets();
+    @Override public void setContentView(View view) {
+        setContentView(view, new ViewGroup.LayoutParams(-1, -1));
     }
-
-    @Override
-    public void setContentView(View view, ViewGroup.LayoutParams params) {
-        super.setContentView(view, params);
-        installModernSystemBarInsets();
-    }
-
-    private void installModernSystemBarInsets() {
-        if (Build.VERSION.SDK_INT < 35) return;
-
-        final View decor = getWindow().getDecorView();
-        final View content = decor.findViewById(android.R.id.content);
-        if (content == null) return;
-
-        View insetRoot = content;
-        while (insetRoot.getParent() instanceof View && insetRoot.getParent() != decor) {
-            insetRoot = (View) insetRoot.getParent();
-        }
-
-        final View target = insetRoot;
-        final int baseLeft = target.getPaddingLeft();
-        final int baseTop = target.getPaddingTop();
-        final int baseRight = target.getPaddingRight();
-        final int baseBottom = target.getPaddingBottom();
-
-        target.setOnApplyWindowInsetsListener((v, windowInsets) -> {
-            Insets bars = windowInsets.getInsets(
-                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-            v.setPadding(
-                    baseLeft + bars.left,
-                    baseTop + bars.top,
-                    baseRight + bars.right,
-                    baseBottom + bars.bottom);
-            return windowInsets;
-        });
-        target.requestApplyInsets();
+    @Override public void setContentView(View view, ViewGroup.LayoutParams params) {
+        screen.removeAllViews();
+        screen.addView(view, params);
     }
 }

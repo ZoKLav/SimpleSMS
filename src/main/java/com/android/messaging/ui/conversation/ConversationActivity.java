@@ -176,6 +176,10 @@ public final class ConversationActivity extends BaseActivity implements Conversa
 
         ComposeMessageView composeView = findViewById(R.id.message_compose_view);
         composeView.setBackgroundColor(panel);
+        android.graphics.drawable.GradientDrawable field = new android.graphics.drawable.GradientDrawable();
+        field.setColor(dark ? 0xff383c43 : 0xfff0f2f5);
+        field.setCornerRadius(com.android.messaging.util.UiUtil.dp(this, 24));
+        compose.setBackground(field);
         compose.setTextColor(primary);
         compose.setHintTextColor(secondary);
         TextView counter = composeView.findViewById(R.id.message_text_counter);
@@ -223,6 +227,7 @@ public final class ConversationActivity extends BaseActivity implements Conversa
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 send.setEnabled(s != null && s.toString().trim().length() > 0);
+                send.setAlpha(send.isEnabled() ? 1f : .35f);
                 if (!restoringDraft) saveDraft();
             }
             @Override public void afterTextChanged(Editable s) { }
