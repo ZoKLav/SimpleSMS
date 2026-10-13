@@ -1,3 +1,24 @@
 package com.android.messaging.sms;
-import android.app.Activity;import android.content.BroadcastReceiver;import android.content.ContentValues;import android.content.Context;import android.content.Intent;import android.content.SharedPreferences;import android.net.Uri;import android.provider.Telephony;
-public final class SendStatusReceiver extends BroadcastReceiver {@Override public void onReceive(Context c,Intent i){if(i==null||!SmsSender.SENT.equals(i.getAction()))return;String raw=i.getStringExtra(SmsSender.URI);if(raw==null)return;Uri u=Uri.parse(raw);SharedPreferences p=c.getSharedPreferences("send_state",Context.MODE_PRIVATE);String k=Integer.toHexString(raw.hashCode());if(getResultCode()!=Activity.RESULT_OK){ContentValues v=new ContentValues();v.put(Telephony.Sms.TYPE,Telephony.Sms.MESSAGE_TYPE_FAILED);v.put(Telephony.Sms.ERROR_CODE,getResultCode());try{c.getContentResolver().update(u,v,null,null);}catch(Exception ignored){}p.edit().remove(k).apply();return;}int done=p.getInt(k,0)+1,count=Math.max(1,i.getIntExtra(SmsSender.COUNT,1));if(done<count){p.edit().putInt(k,done).apply();return;}ContentValues v=new ContentValues();v.put(Telephony.Sms.TYPE,Telephony.Sms.MESSAGE_TYPE_SENT);v.put(Telephony.Sms.DATE_SENT,System.currentTimeMillis());v.put(Telephony.Sms.ERROR_CODE,0);try{c.getContentResolver().update(u,v,null,null);}catch(Exception ignored){}p.edit().remove(k).apply();}}
+
+import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import com.android.messaging.storage.EncryptedSmsStore;
+import com.android.messaging.util.NotificationHelper;
+import com.android.messaging.util.Workers;
+
+public final class SendStatusReceiver extends BroadcastReceiver {
+    @Override public void onReceive(Context c, Intent intent) {
+        if (intent == null || !SmsSender.sentAction(c).equals(intent.getAction())) return;
+        final int result = getResultCode(), part = intent.getIntExtra(SmsSender.PART, -1);
+        final long id = intent.getLongExtra(SmsSender.ID, 0), when = System.currentTimeMillis();
+        if (id >= 0 || part < 0) return;
+        PendingResult pending = goAsync();
+        Workers.INBOUND.execute(() -> {
+            try { EncryptedSmsStore.get(c).sentPart(id, part, result == Activity.RESULT_OK, result, when); SmsRepository.changed(); }
+            catch (Exception e) { try { NotificationHelper.storageError(c); } catch (Exception ignored) { } }
+            finally { pending.finish(); }
+        });
+    }
+}

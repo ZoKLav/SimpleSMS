@@ -29,7 +29,7 @@ public final class AppPrefs {
     public static String swipeLeft(Context c){return p(c).getString("swipe_left",ARCHIVE);}
     public static String swipeRight(Context c){return p(c).getString("swipe_right",READ);}
     public static boolean notifications(Context c){return p(c).getBoolean("notifications",true);}
-    public static boolean preview(Context c){return p(c).getBoolean("preview",true);}
+    public static boolean preview(Context c){return p(c).getBoolean("preview",false);}
     public static boolean vibrate(Context c){return p(c).getBoolean("vibrate",true);}
     public static boolean deliveryReports(Context c){return p(c).getBoolean("delivery",false);}
     public static boolean sendSound(Context c){return p(c).getBoolean("send_sound",true);}

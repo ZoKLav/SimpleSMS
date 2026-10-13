@@ -20,7 +20,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import android.support.v7.app.ActionBar;
+import androidx.appcompat.app.ActionBar;
 
 import com.android.messaging.R;
 import com.android.messaging.util.AppPrefs;
@@ -66,7 +66,7 @@ public final class ApplicationSettingsActivity extends BaseActivity {
 
         section("Notifications");
         toggle("Notifications", "Show notifications for incoming SMS", AppPrefs.notifications(this), "notifications", false);
-        toggle("Message preview", "Show message text in notifications", AppPrefs.preview(this), "preview", false);
+        toggle("Message preview", "Off by default; enabling exposes message text to Android notifications", AppPrefs.preview(this), "preview", false);
         toggle("Vibrate", "Vibrate for incoming messages", AppPrefs.vibrate(this), "vibrate", false);
         row("Default notification tone", toneLabel(AppPrefs.defaultTone(this)), this::pickTone);
         row("Rebuild notification channels", "Apply changed tones and vibration on Android 8+", () -> {
@@ -84,11 +84,13 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         toggle("Confirm before deleting", "Confirm before permanently removing messages", AppPrefs.confirmDelete(this), "confirm_delete", false);
 
         section("Privacy");
+        row("Storage & backup", "Encrypted private SMS, local backup and existing-history migration", () -> startActivity(new Intent(this, StorageSettingsActivity.class)));
+        row("App permissions", "Manage local contacts, SMS and notifications", () -> com.android.messaging.sms.SmsRole.appSettings(this));
         toggle("Allow screenshots", "Off by default; also hides message screens from recent-app previews", AppPrefs.screenshots(this), "screenshots", true);
         toggle("Keyboard personalized learning", "Off by default for message and recipient fields", AppPrefs.keyboardLearning(this), "keyboard_learning", true);
 
         TextView note = new TextView(this);
-        note.setText("No Internet permission. No analytics. No accounts. No RCS. No MMS transport. SMS stays in Android's Telephony provider.");
+        note.setText("No Internet permission. No analytics or accounts. New SMS and drafts use encrypted private storage. Existing shared history can be moved in Storage & backup.");
         note.setTextSize(13);
         note.setTextColor(AppPrefs.isDark(this) ? 0xffbdbdbd : 0xff757575);
         note.setPadding(UiUtil.dp(this, 18), UiUtil.dp(this, 24), UiUtil.dp(this, 18), UiUtil.dp(this, 36));

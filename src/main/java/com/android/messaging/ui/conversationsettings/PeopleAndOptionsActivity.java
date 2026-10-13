@@ -19,7 +19,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import android.support.v7.app.ActionBar;
+import androidx.appcompat.app.ActionBar;
 
 import com.android.messaging.R;
 import com.android.messaging.util.AppPrefs;
@@ -44,7 +44,9 @@ public final class PeopleAndOptionsActivity extends BaseActivity {
         if (address == null || address.trim().isEmpty()) { finish(); return; }
         content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
         content.setBackgroundColor(AppPrefs.isDark(this) ? 0xff212121 : 0xfffafafa);
-        setContentView(content);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(content);
+        setContentView(scroll);
         configureActionBar(); populate();
     }
 
@@ -54,6 +56,18 @@ public final class PeopleAndOptionsActivity extends BaseActivity {
         bar.setBackgroundDrawable(new ColorDrawable(color));
         bar.setDisplayHomeAsUpEnabled(true);
         String name = ContactResolver.name(this, address); bar.setTitle(name); bar.setSubtitle(name.equals(address) ? null : address);
+    }
+
+    @Override protected void onContactsChanged() {
+        if (address == null) return;
+        final String current = address;
+        com.android.messaging.util.Workers.IO.execute(() -> {
+            String name = ContactResolver.name(this, current);
+            runOnUiThread(() -> {
+                ActionBar bar = getSupportActionBar();
+                if (bar != null && !isDestroyed()) { bar.setTitle(name); bar.setSubtitle(name.equals(current) ? null : current); }
+            });
+        });
     }
 
     @Override public boolean onOptionsItemSelected(MenuItem item) {
