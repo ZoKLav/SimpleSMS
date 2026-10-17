@@ -374,3 +374,10 @@ An application should not need to send a status report to a corporation every ti
 SimpleSMS does the boring thing:
 
 **It works locally, handles SMS, and minds its own fucking business.**
+
+## Screenshots
+
+<p align="center">
+  <img src="screenshots/1.png" width="45%" alt="Screenshot 1">
+  <img src="screenshots/2.png" width="45%" alt="Screenshot 2">
+</p>
