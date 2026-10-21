@@ -1,24 +1,9 @@
 package com.android.messaging.sms;
-
 import android.app.Activity;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import com.android.messaging.storage.EncryptedSmsStore;
-import com.android.messaging.util.NotificationHelper;
-import com.android.messaging.util.Workers;
-
+import android.content.*;
+import com.android.messaging.security.Vault;
+import org.json.JSONObject;
+/** Append encrypted status events, including when the user has locked the app. */
 public final class SendStatusReceiver extends BroadcastReceiver {
-    @Override public void onReceive(Context c, Intent intent) {
-        if (intent == null || !SmsSender.sentAction(c).equals(intent.getAction())) return;
-        final int result = getResultCode(), part = intent.getIntExtra(SmsSender.PART, -1);
-        final long id = intent.getLongExtra(SmsSender.ID, 0), when = System.currentTimeMillis();
-        if (id >= 0 || part < 0) return;
-        PendingResult pending = goAsync();
-        Workers.INBOUND.execute(() -> {
-            try { EncryptedSmsStore.get(c).sentPart(id, part, result == Activity.RESULT_OK, result, when); SmsRepository.changed(); }
-            catch (Exception e) { try { NotificationHelper.storageError(c); } catch (Exception ignored) { } }
-            finally { pending.finish(); }
-        });
-    }
+ @Override public void onReceive(Context context,Intent i){if(!SmsSender.SENT.equals(i.getAction()))return;long id=i.getLongExtra("message",-1);if(id==-1)return;int code=getResultCode();PendingResult result=goAsync();Context c=context.getApplicationContext();new Thread(()->{try{TransportStore.event(c,id,new JSONObject().put("sent_part",i.getIntExtra("part",0)).put("part_count",i.getIntExtra("count",1)).put("part_result",code));}catch(Exception e){com.android.messaging.util.NotificationHelper.failure(c);}finally{result.finish();}},"private-sms-status").start();}
 }

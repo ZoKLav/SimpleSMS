@@ -5,26 +5,20 @@ import android.content.res.Configuration;
 import android.graphics.Insets;
 import android.os.Build;
 import android.os.Bundle;
-import android.database.ContentObserver;
-import android.os.Handler;
-import android.os.Looper;
-import android.provider.ContactsContract;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.view.ContextThemeWrapper;
-import androidx.appcompat.widget.Toolbar;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.view.ContextThemeWrapper;
+import android.support.v7.widget.Toolbar;
 import com.android.messaging.R;
 
 /** One measured column owns the toolbar, screen content, and system insets. */
 public abstract class BaseActivity extends AppCompatActivity {
     private FrameLayout screen;
-    private ContentObserver contactObserver;
-    private String appearance;
 
     @Override protected void attachBaseContext(Context base) {
         int scale = AppPrefs.scale(base);
@@ -37,8 +31,7 @@ public abstract class BaseActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle state) {
         setTheme(AppPrefs.isDark(this) ? R.style.BugleTheme_Dark : R.style.BugleTheme);
         super.onCreate(state);
-        appearance = appearanceKey();
-        if (!AppPrefs.screenshots(this)) getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         if (Build.VERSION.SDK_INT >= 30) {
             getWindow().setDecorFitsSystemWindows(false);
@@ -81,6 +74,15 @@ public abstract class BaseActivity extends AppCompatActivity {
         }
     }
 
+    @Override protected void onResume(){
+        super.onResume();
+        android.app.KeyguardManager km=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
+        if(!com.android.messaging.security.Vault.unlocked() || (com.android.messaging.security.VaultKeys.lockEnabled(this)&&km!=null&&km.isDeviceLocked())){
+            com.android.messaging.security.Vault.lock();
+            startActivity(new android.content.Intent(this,com.android.messaging.security.UnlockActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK|android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK));
+            finish();
+        }
+    }
     @Override public void setContentView(int resource) {
         screen.removeAllViews();
         getLayoutInflater().inflate(resource, screen, true);
@@ -92,36 +94,4 @@ public abstract class BaseActivity extends AppCompatActivity {
         screen.removeAllViews();
         screen.addView(view, params);
     }
-
-    private String appearanceKey() {
-        return AppPrefs.theme(this) + ":" + AppPrefs.accent(this) + ":" + AppPrefs.incoming(this)
-                + ":" + AppPrefs.outgoing(this) + ":" + AppPrefs.background(this) + ":" + AppPrefs.scale(this)
-                + ":" + AppPrefs.screenshots(this) + ":" + AppPrefs.keyboardLearning(this);
-    }
-    @Override protected void onResume() {
-        super.onResume();
-        if (!appearanceKey().equals(appearance)) { recreate(); return; }
-        ContactResolver.invalidate();
-        observeContacts();
-        onContactsChanged();
-    }
-    private void observeContacts() {
-        if (contactObserver != null || !ContactResolver.allowed(this)) return;
-        ContentObserver observer = new ContentObserver(new Handler(Looper.getMainLooper())) {
-            @Override public void onChange(boolean selfChange) { ContactResolver.invalidate(); onContactsChanged(); }
-        };
-        try { getContentResolver().registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, observer); contactObserver = observer; }
-        catch (SecurityException ignored) { }
-    }
-    @Override protected void onPause() {
-        if (contactObserver != null) {
-            getContentResolver().unregisterContentObserver(contactObserver); contactObserver = null;
-        }
-        super.onPause();
-    }
-    @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
-        super.onRequestPermissionsResult(request, permissions, results);
-        ContactResolver.invalidate(); observeContacts(); onContactsChanged();
-    }
-    protected void onContactsChanged() { }
 }

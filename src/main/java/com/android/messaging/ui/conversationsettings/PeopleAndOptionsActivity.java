@@ -19,7 +19,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.ActionBar;
+import android.support.v7.app.ActionBar;
 
 import com.android.messaging.R;
 import com.android.messaging.util.AppPrefs;
@@ -41,12 +41,11 @@ public final class PeopleAndOptionsActivity extends BaseActivity {
         super.onCreate(state);
         threadId = getIntent().getLongExtra(EXTRA_THREAD_ID, -1L);
         address = getIntent().getStringExtra(EXTRA_ADDRESS);
+        if(address==null&&com.android.messaging.security.Vault.unlocked())try{address=com.android.messaging.sms.SmsRepository.address(this,threadId);}catch(Exception ignored){}
         if (address == null || address.trim().isEmpty()) { finish(); return; }
         content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
         content.setBackgroundColor(AppPrefs.isDark(this) ? 0xff212121 : 0xfffafafa);
-        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
-        scroll.addView(content);
-        setContentView(scroll);
+        setContentView(content);
         configureActionBar(); populate();
     }
 
@@ -58,18 +57,6 @@ public final class PeopleAndOptionsActivity extends BaseActivity {
         String name = ContactResolver.name(this, address); bar.setTitle(name); bar.setSubtitle(name.equals(address) ? null : address);
     }
 
-    @Override protected void onContactsChanged() {
-        if (address == null) return;
-        final String current = address;
-        com.android.messaging.util.Workers.IO.execute(() -> {
-            String name = ContactResolver.name(this, current);
-            runOnUiThread(() -> {
-                ActionBar bar = getSupportActionBar();
-                if (bar != null && !isDestroyed()) { bar.setTitle(name); bar.setSubtitle(name.equals(current) ? null : current); }
-            });
-        });
-    }
-
     @Override public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == android.R.id.home) { finish(); return true; }
         return super.onOptionsItemSelected(item);
@@ -78,11 +65,6 @@ public final class PeopleAndOptionsActivity extends BaseActivity {
     private void populate() {
         content.removeAllViews();
         row("Conversation color", UiUtil.hex(AppPrefs.conversationColor(this, address)), this::chooseColor);
-        row("Notification tone", toneLabel(AppPrefs.tone(this, address)), this::pickTone);
-        if (AppPrefs.hasContactTone(this, address)) row("Use app default notification tone", "Remove this contact's custom sound", () -> {
-            AppPrefs.clearContactTone(this, address); NotificationHelper.clearChannels(this); populate();
-        });
-        toggle("Mute notifications", "Do not notify for this conversation", AppPrefs.muted(this, address));
         if (threadId >= 0) row(AppPrefs.isArchived(this, threadId) ? "Unarchive conversation" : "Archive conversation",
                 "Archived conversations stay out of the main list", () -> { AppPrefs.archive(this, threadId, !AppPrefs.isArchived(this, threadId)); populate(); });
         row("Reset conversation color", "Use the app-wide outgoing-message color", () -> { AppPrefs.clearConversationColor(this, address); configureActionBar(); populate(); });

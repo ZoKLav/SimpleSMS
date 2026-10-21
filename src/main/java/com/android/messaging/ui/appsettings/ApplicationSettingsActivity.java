@@ -20,7 +20,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.ActionBar;
+import android.support.v7.app.ActionBar;
 
 import com.android.messaging.R;
 import com.android.messaging.util.AppPrefs;
@@ -64,15 +64,18 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         colorRow("Conversation background", AppPrefs.background(this), "background", false);
         row("UI scale (DPI)", AppPrefs.scale(this) + "%", this::chooseScale);
 
-        section("Notifications");
-        toggle("Notifications", "Show notifications for incoming SMS", AppPrefs.notifications(this), "notifications", false);
-        toggle("Message preview", "Off by default; enabling exposes message text to Android notifications", AppPrefs.preview(this), "preview", false);
-        toggle("Vibrate", "Vibrate for incoming messages", AppPrefs.vibrate(this), "vibrate", false);
-        row("Default notification tone", toneLabel(AppPrefs.defaultTone(this)), this::pickTone);
-        row("Rebuild notification channels", "Apply changed tones and vibration on Android 8+", () -> {
-            NotificationHelper.clearChannels(this);
-            Toast.makeText(this, "Notification channels will be recreated as messages arrive", Toast.LENGTH_SHORT).show();
+        section("Privacy & messaging");
+        row("Notifications", "Generic notifications only; use Android settings for sound and visibility", () -> startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()))));
+        privateStorageToggle();
+        row("Move existing SMS/MMS", "Encrypt existing shared messages, verify, then remove each original", () -> com.android.messaging.sms.ProviderMigration.confirm(this));
+        boolean appLock=com.android.messaging.security.VaultKeys.lockEnabled(this);
+        row("App lock", appLock ? "On — tap to turn off; private storage stays encrypted" : "Off — tap to require your device credential", () -> {
+            new AlertDialog.Builder(this).setTitle(appLock?"Turn off app lock?":"Enable app lock?")
+                .setMessage(appLock?"Private data stays encrypted, but SimpleSMS will be able to use its key without asking for your credential. Your device or system app lock can control access. Existing encrypted data will be converted in place; keep the app open until finished.":"Require your device credential when opening SimpleSMS. A secure screen lock and hardware-enforced authentication are required. Existing private data will be converted in place; keep the app open until finished.")
+                .setPositiveButton(appLock?"Turn off":"Enable",(d,w)->startActivity(new Intent(this,com.android.messaging.security.UnlockActivity.class).putExtra("lock_mode",appLock?"off":"on")))
+                .setNegativeButton("Cancel",null).show();
         });
+        if(appLock)row("Lock now", "Clear unlocked caches and return to device authentication", () -> {com.android.messaging.security.Vault.lock();startActivity(new Intent(this,com.android.messaging.security.UnlockActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));finish();});
 
         section("Gestures");
         row("Swipe left", actionLabel(AppPrefs.swipeLeft(this)), () -> chooseAction("swipe_left"));
@@ -84,17 +87,30 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         toggle("Confirm before deleting", "Confirm before permanently removing messages", AppPrefs.confirmDelete(this), "confirm_delete", false);
 
         section("Privacy");
-        row("Storage & backup", "Encrypted private SMS, local backup and existing-history migration", () -> startActivity(new Intent(this, StorageSettingsActivity.class)));
-        row("App permissions", "Manage local contacts, SMS and notifications", () -> com.android.messaging.sms.SmsRole.appSettings(this));
-        toggle("Allow screenshots", "Off by default; also hides message screens from recent-app previews", AppPrefs.screenshots(this), "screenshots", true);
+
         toggle("Keyboard personalized learning", "Off by default for message and recipient fields", AppPrefs.keyboardLearning(this), "keyboard_learning", true);
 
         TextView note = new TextView(this);
-        note.setText("No Internet permission. No analytics or accounts. New SMS and drafts use encrypted private storage. Existing shared history can be moved in Storage & backup.");
+        note.setText("Optional private SMS/MMS storage and optional app lock. New traffic uses Android storage unless Private message storage is enabled. Keystore keys are generated on this device and are not embedded in the APK. No backups, accounts or analytics. Carrier SMS/MMS is not end-to-end encrypted. Existing shared SMS/MMS and earlier private messages stay visible in either mode. Turning private storage off does not export earlier private data. Shared originals stay in Android storage unless you explicitly move or delete them.");
         note.setTextSize(13);
         note.setTextColor(AppPrefs.isDark(this) ? 0xffbdbdbd : 0xff757575);
         note.setPadding(UiUtil.dp(this, 18), UiUtil.dp(this, 24), UiUtil.dp(this, 18), UiUtil.dp(this, 36));
         content.addView(note);
+    }
+
+    private void privateStorageToggle(){
+        boolean enabled=false;try{enabled=com.android.messaging.security.StorageMode.enabled(this);}catch(Exception ignored){}
+        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(UiUtil.dp(this,16),UiUtil.dp(this,12),UiUtil.dp(this,16),UiUtil.dp(this,16));
+        Switch sw=new Switch(this);sw.setText("Private message storage");sw.setTextSize(18);sw.setChecked(enabled);box.addView(sw);
+        TextView warning=new TextView(this);warning.setText("WARNING: Enabling this removes new incoming and outgoing SMS/MMS from Android's shared message store after the private encrypted copy is verified. These messages are then managed solely by SimpleSMS and will not be available to other SMS apps. Clearing app data, uninstalling, or losing the encryption key can permanently lose them. Existing history is not moved by this switch.");warning.setTextSize(16);warning.setTypeface(null,android.graphics.Typeface.BOLD);warning.setTextColor(0xffb71c1c);warning.setBackgroundColor(0xffffebee);warning.setPadding(UiUtil.dp(this,12),UiUtil.dp(this,12),UiUtil.dp(this,12),UiUtil.dp(this,12));box.addView(warning);content.addView(box);
+        sw.setOnCheckedChangeListener((button,checked)->{
+            Runnable save=()->{try{com.android.messaging.security.StorageMode.set(this,checked);populate();}catch(Exception failure){Toast.makeText(this,failure.getMessage(),Toast.LENGTH_LONG).show();populate();}};
+            if(checked){AlertDialog dialog=new AlertDialog.Builder(this).setTitle("WARNING: Delete shared copies of new messages?")
+                .setMessage("New incoming and outgoing SMS/MMS, including attachments, will be kept in SimpleSMS's private encrypted storage. Verified shared copies will be deleted from Android's message store. SimpleSMS will solely manage these messages. Other SMS apps will not see them, and clearing app data, uninstalling or losing the key can permanently lose them.\n\nThis does not move older history or encrypt carrier transport. Messages that cannot be verified or safely removed remain in shared storage.\n\nEnable only if you accept this change.")
+                .setPositiveButton("Enable private storage",(d,w)->save.run()).setNegativeButton("Cancel",(d,w)->populate()).setOnCancelListener(d->populate()).create();
+                dialog.setOnShowListener(d->{dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xffb71c1c);int titleId=getResources().getIdentifier("alertTitle","id","android");TextView title=dialog.findViewById(titleId);if(title!=null)title.setTextColor(0xffb71c1c);});dialog.show();
+            }else save.run();
+        });
     }
 
     private void section(String title) {

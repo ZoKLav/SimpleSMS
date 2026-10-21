@@ -15,7 +15,7 @@ public final class AppPrefs {
     private static final String P="settings", ARCH="archived";
     public static final String NONE="none", ARCHIVE="archive", DELETE="delete", READ="read", SILENT="__silent__";
     private AppPrefs() {}
-    public static SharedPreferences p(Context c){return c.getSharedPreferences(P,Context.MODE_PRIVATE);}
+    public static SharedPreferences p(Context c){return com.android.messaging.security.Vault.preferences(c);}
     public static void setInt(Context c,String k,int v){p(c).edit().putInt(k,v).apply();}
     public static void setString(Context c,String k,String v){p(c).edit().putString(k,v).apply();}
     public static void setBool(Context c,String k,boolean v){p(c).edit().putBoolean(k,v).apply();}
