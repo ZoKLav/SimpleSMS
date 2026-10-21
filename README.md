@@ -321,6 +321,88 @@ An SMS client should not need a mission statement longer than that, but apparent
 
 ## Version notes
 
+# SimpleSMS 1.4.3
+
+## Message storage
+
+- Added **Settings → Private message storage**, disabled by default.
+- With private storage disabled, new incoming and outgoing SMS/MMS is saved in Android’s shared message store.
+- With private storage enabled, new messages and attachments are saved directly into SimpleSMS’s encrypted private store.
+- Added scoped cleanup of matching shared copies. Deletion requires verification of the persisted encrypted message and attachments, matching content, and a final check that the shared original remains unchanged.
+- Locked, changed, ambiguous, active-send, or unverified shared originals are retained.
+- Cleanup requiring an authenticated private key waits until the app is unlocked.
+- Added a prominent red warning and confirmation explaining shared-copy deletion, exclusive management by SimpleSMS, and possible permanent loss after uninstalling, clearing app data, or losing the encryption key.
+- Storage routing is retained for messages already being sent or downloaded when the setting changes.
+- Disabling private storage does not export or decrypt earlier private messages.
+
+## Existing messages
+
+- Display existing Android SMS/MMS alongside private encrypted messages.
+- Combine shared and private messages into chronological conversations.
+- Read shared MMS text and attachments without requiring migration.
+- Observe shared-store changes and refresh the message lists.
+- Prevent collisions between private, shared SMS, and shared MMS message IDs.
+- Suppress matching migrated copies while retaining changed shared messages.
+- Allow browsing shared history with SMS read permission without requiring send and receive permissions.
+- Keep private history accessible when shared-message read permission is unavailable.
+- Show read errors and permission guidance instead of silently presenting an empty history.
+
+## Manual migration
+
+- Added **Move existing SMS/MMS** for explicitly converting older shared history.
+- Encrypt messages and attachments, read back and authenticate the stored copies, then conditionally delete unchanged originals.
+- Skip locked messages, active sends, changed originals, and failed verification.
+- Recognize previously stored copies when retrying an interrupted move.
+- Preserve available legacy drafts and archive settings.
+- Enabling private storage alone does not migrate older history.
+
+## Encryption and key handling
+
+- Added private encrypted storage for message contents, addresses, timestamps, statuses, conversation metadata, attachments, drafts, and ordinary preferences.
+- Use a fresh random AES-256 key for each encrypted record or attachment, protected with AES-GCM.
+- Wrap individual data keys using RSA-OAEP and a device-generated Android Keystore key.
+- Keep secret keys out of the APK. The encryption algorithms and format are public; security depends on the generated keys.
+- Store attachments under random filenames and verify their contents against authenticated digests.
+- Authenticate record identities and split large encrypted database records into smaller chunks.
+- Encrypt and remove legacy plaintext app preferences on successful opening.
+- Retain only non-secret startup and routing policies outside encrypted storage.
+- Disable Android app backup and device-transfer extraction. No backup, export, or recovery feature is included.
+
+## Optional app lock
+
+- Added **Settings → App lock**, independent of private message storage.
+- Default app lock to off for fresh installations.
+- Preserve the existing lock when upgrading an already protected vault.
+- Keep private data encrypted when app lock is disabled, without requiring an additional app credential prompt.
+- Require hardware-enforced device authentication when app lock is enabled.
+- Re-encrypt existing private data when changing key authentication policy.
+- Support interrupted key conversions without retiring the original key before conversion commits.
+- With app lock enabled, clear unlocked caches on screen-off, after 30 seconds in the background, after the four-minute session limit, or through **Lock now**.
+
+## MMS support
+
+- Added carrier MMS sending, incoming notifications, and manual downloads.
+- Support text, image, audio, video, and outgoing group MMS.
+- Support comma- or semicolon-separated recipients.
+- Resize oversized images to fit carrier limits.
+- Cap outgoing MMS at the carrier limit or 1 MiB, whichever is smaller.
+- Bound downloaded MMS and individual attachment reads to 10 MiB.
+- Handle carrier acknowledgements and deferred-download responses.
+- Use temporary, seekable RAM-backed transfer descriptors instead of plaintext app transport files.
+- Add MMS parser bounds checks and malformed-input handling.
+- Preserve relevant read and lock state when completing downloads.
+- Suppress completed messages’ duplicate pending notifications.
+
+## Privacy and message handling
+
+- Use generic notifications without sender identities, message text, or conversation identifiers.
+- Keep notification sound and visibility controls in Android settings.
+- Block screenshots and recent-app captures.
+- Prevent message and recipient fields from saving their contents into ordinary saved view state.
+- Store send and delivery callback information encrypted.
+- Handle duplicate and out-of-order multipart status callbacks.
+- Route explicit read, lock, and delete actions to the correct shared or private message.
+
 ### 1.2.3
 
 - Actual AOSP Messaging-derived UI structure retained
