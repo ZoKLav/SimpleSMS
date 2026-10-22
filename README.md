@@ -1,327 +1,136 @@
 # SimpleSMS
 
-> **SMS. Without the corporate surveillance carnival attached.**
+**SMS and MMS, without the corporate surveillance carnival attached.**
 
-SimpleSMS is a stripped-down Android SMS client built from the old AOSP Messaging lineage and dragged into the present without dragging the modern pile of telemetry, cloud dependencies, account systems, "smart" features, engagement metrics, cross-device syncing, RCS infrastructure, or other corporate barnacles along with it.
+SimpleSMS is a local Android messaging client built around the AOSP Messaging / Bugle-era interface. It handles conversations, contacts, notifications and carrier messages without accounts, analytics, advertising, cloud sync or an RCS service attached to it.
 
-It sends SMS.
+The aim is straightforward: keep the familiar messaging interface, add useful controls, and leave the user's data on their device wherever the carrier protocol allows. An SMS client should not need to report how often somebody opens Settings.
 
-It receives SMS.
+## What it does
 
-It shows conversations.
+| Area | Features |
+| --- | --- |
+| SMS | Send and receive, multipart messages, sent/failed status, optional carrier delivery reports |
+| MMS | Carrier sending, manual downloads, attachments and outgoing group messages |
+| Conversations | Search, archive, configurable swipe actions, read state and message locks |
+| Appearance | Light/dark/system themes, accent and bubble colors, conversation backgrounds, custom hex colors and 80–150% UI scaling |
+| Contact controls | Local contact lookup, per-conversation colors, mute and notification tones |
+| Notifications | Optional sender/text previews, reply and confirmed delete actions, Android notification settings |
+| Media | Built-in text, image, audio and video viewer; explicit external-open option |
+| Private storage | Optional encrypted message storage, encrypted attachments, drafts and ordinary preferences |
+| App lock | Optional device-credential gate, independent of the message-storage setting |
 
-It does not need to phone home to a trillion-dollar company so somebody can graph how often the Settings screen was opened.
+There is no account to create, backend to maintain, advertising SDK, analytics SDK or cloud-sync dependency. RCS, automatic MMS downloads, automatic resend scheduling and backup/export/recovery features are not implemented.
 
-That is the entire point.
+## Getting started
 
----
+Install the APK and open SimpleSMS. Set it as the default SMS app for normal sending, receiving and shared-message editing, then grant the permissions needed for the features you use.
 
-## Why this exists
+Existing Android SMS/MMS and earlier private messages appear together. You do not need to import your history just to read it, and enabling private storage does not automatically move old messages.
 
-Modern mobile software has developed a deranged habit of treating the user as a telemetry source first and a customer second.
+For attachments, use **+** in the composer. Tap a pending MMS to confirm its download, then open the downloaded message in the built-in viewer; supported formats depend on the device's codecs.
 
+## Choose where messages are stored
 
-A messaging app wants cloud services, remote configuration, device identifiers, recommendation engines, account integration, background services, and six hundred megabytes of other garbage that somehow became "normal."
+**Settings → Private message storage** controls new messages and explicit MMS downloads. It is off by default, and messages already being sent or downloaded keep the storage route chosen when that operation began.
 
-SimpleSMS is the opposite of that.
+| Setting | Behavior |
+| --- | --- |
+| Off | New messages go into Android's shared message store, where other SMS apps can access them. Earlier private messages stay encrypted and visible in SimpleSMS. |
+| On | New messages and attachments go into SimpleSMS's encrypted private store. Matching shared copies are removed only after verification and a check that the originals remain unchanged. |
 
-The operating principle is simple:
+Turning private storage off does not export earlier private messages. Locked, changed, ambiguous, active-send or unverified shared copies are retained; cleanup that needs an authenticated key waits until the app is unlocked.
 
-**If an SMS client does not need something to send, receive, display, organize, or notify about SMS, it does not get it.**
+**Private messages become SimpleSMS's responsibility.** Other SMS apps cannot read them, and uninstalling, clearing app data or losing the encryption key can permanently destroy access. There is no backup or recovery feature, so enabling the setting requires a separate warning and confirmation.
 
----
+### Move existing SMS/MMS
 
-## What SimpleSMS actually is
+Use **Settings → Move existing SMS/MMS** to move older shared history into encrypted storage. For each eligible message, SimpleSMS saves the encrypted copy, reads it back, authenticates its attachments, compares the contents and checks the original again before deleting it from Android's shared store.
 
-SimpleSMS is derived from the **AOSP Messaging / Bugle-era application structure and UI**, specifically the old Android Messaging lineage used around the Marshmallow/Nougat era.
+Version 1.4.5 shows SMS/MMS progress and moved/kept counts. **Stop** finishes the current message safely; running the move again checks existing private copies and continues with remaining originals.
 
-The point was not to "reimagine" the interface.
+Keep the app open during a move. App-lock timeouts still apply, so a long import may require unlocking and starting the move again; a provider or Keystore operation already in progress cannot be interrupted by Stop.
 
-The point was to keep a good, familiar Android SMS interface and remove the network-facing crap that accumulated around modern messaging clients.
+Avoid editing shared messages in another app during migration. The shared provider and private vault cannot participate in one transaction, and deleting a shared row does not guarantee physical erasure of old flash pages, snapshots or copies held elsewhere.
 
-The original AOSP-style conversation list, conversation view, compose flow, swipe behavior, archive behavior, message bubbles, contact presentation, and general visual structure are retained and modernized where necessary for current Android versions.
+## App lock and encryption
 
----
+**Settings → App lock** is separate from private message storage. It defaults to off on fresh installations, while an existing protected vault keeps its lock until you change it; private data remains encrypted with app lock off.
 
-## What was removed
+Each private record or attachment uses a fresh random AES-256 key with AES-GCM encryption. That key is wrapped using RSA-OAEP and a device-generated Android Keystore key, rather than a secret embedded in the APK.
 
-A lot.
+With app lock enabled, SimpleSMS requires hardware-enforced device authentication. It clears unlocked caches on screen-off, after 30 seconds fully in the background, after the four-minute session limit, or through **Settings → Lock now**.
 
-### Network and cloud garbage removed
+Changing the app-lock setting re-encrypts existing private records and media under the new key policy. Keep the app open until it finishes; interrupted conversions retain the information needed to resume without retiring the original key prematurely.
 
-- `INTERNET` permission removed
-- Network-facing messaging layers removed
-- Cloud messaging dependencies removed
-- Account systems removed
-- RCS removed
-- MMS transport removed
-- Attachment upload/download infrastructure removed
-- Cloud sync removed
-- Remote configuration removed
-- Analytics removed
-- Advertising SDKs removed
-- Crash-reporting SDKs removed
-- Usage telemetry removed
-- Tracking identifiers removed
-- Background network jobs removed
-- "Smart" online services removed
+Encryption protects stored app contents, but it does not make a compromised operating system trustworthy. Plaintext exists while messages are displayed or sent, and file sizes, record counts and other storage metadata remain observable.
 
-SimpleSMS cannot quietly send analytics to a server because **the app does not have Android's Internet permission**.
+## Notifications and media privacy
 
-### Permission bloat removed
+Sender and message previews are off by default. Enable **Show notification details** if you want them in the notification shade; Android's lock-screen settings and authorized notification listeners still determine who can see that content.
 
-The application requests only:
+**Notification reply and delete** is on by default. With app lock off, Reply supports inline entry; with app lock on, it opens the composer through the authentication gate, while Delete asks for confirmation and respects message locks.
 
-```text
-READ_CONTACTS
-READ_SMS
-RECEIVE_SMS
-SEND_SMS
-POST_NOTIFICATIONS
-```
+Locked sessions use generic notifications without action buttons. **Hide MMS content** also defaults on, concealing MMS text in conversation lists and notifications until you choose to view it.
 
-`READ_CONTACTS` is used to turn phone numbers into names.
+Screenshots and recent-app captures are blocked, keyboard personalized learning is disabled by default in message fields, and Android app backup/device-transfer extraction is disabled. Copying text still puts it on Android's clipboard, and choosing **Open externally** gives the selected app temporary plaintext access that it may use to retain its own copy.
 
-The SMS permissions are used because this is, in fact, an SMS application.
+## Permissions and carrier access
 
-`POST_NOTIFICATIONS` is used to notify about incoming messages on Android versions that require explicit notification permission.
+The app manifest declares these permissions:
 
-If a future feature requires turning the manifest into a permissions landfill, that feature can die instead.
+| Permission | Purpose |
+| --- | --- |
+| `READ_CONTACTS` | Resolve phone numbers through the local contacts provider |
+| `READ_SMS` | Display existing shared message history |
+| `RECEIVE_SMS` | Receive SMS as the default messaging app |
+| `SEND_SMS` | Send carrier messages through Android's telephony APIs |
+| `RECEIVE_MMS` | Receive carrier MMS events |
+| `RECEIVE_WAP_PUSH` | Receive MMS notification pushes |
+| `POST_NOTIFICATIONS` | Show notifications on Android versions requiring permission |
 
----
+SimpleSMS does not request `INTERNET`. Carrier MMS transport is handled through Android's telephony services, so that absence does not mean MMS is offline or that the carrier cannot see its traffic.
 
-## What was added
+SMS and MMS are **not end-to-end encrypted**. Android, the modem and the carrier handle messages outside the app's encrypted store; the privacy goal is to avoid adding an app-operated data collector to that existing chain.
 
-The old AOSP client was useful. It did not need to become a corporate portal.
+## Compatibility and limits
 
-The useful parts were kept and expanded.
+SMS requires Android 7.0 or newer. The RAM-backed MMS transport requires Android 8.0 or newer, and the interface includes system-bar and display-cutout handling for modern Android layouts.
 
-### Appearance
+Outgoing MMS is limited to the carrier's configured size or 1 MiB, whichever is smaller. Downloads and individual attachment reads are bounded at 10 MiB; oversized outgoing images are resized to fit the sending limit.
 
-- Configurable application accent color
-- Configurable outgoing message bubble color
-- Configurable incoming message bubble color
-- Configurable conversation background color
-- Per-conversation accent colors
-- Light theme
-- Dark theme
-- System theme
-- Correct dark-mode text inversion
-- Custom hexadecimal colors
-- Configurable UI/DPI scaling from 80% through 150%
-
-### Conversation controls
-
-- Archive conversations
-- Unarchive conversations
-- Archived conversation list
-- Incoming messages automatically restore archived threads to the main list
-- Search conversations
-- Long-press conversation actions
-- Configurable swipe-left action
-- Configurable swipe-right action
-- Swipe actions can be set to:
-  - None
-  - Archive / unarchive
-  - Mark read
-  - Delete
+Comma- or semicolon-separated recipients support outgoing group MMS, including text-only messages. Replies to incoming group MMS currently target the sender, and MMS read/delivery reports are not implemented.
 
-### Per-contact behavior
+MMS transfers use temporary, seekable RAM-backed descriptors instead of plaintext app transport files. Process death or an expired transfer may require a retry, and carrier/OEM compatibility still needs device testing.
 
-- Unique notification tone per contact/conversation
-- Per-contact mute
-- Per-contact conversation color
-- Resettable contact overrides
-- Contact-name lookup from the local Android contacts provider
+## Version history
 
-No contact list is uploaded anywhere because, once again, **there is nowhere for this app to upload it to**.
+### SimpleSMS 1.4.5
 
-### Notifications
+- Reduce redundant conversation refreshes and avoid repeated encrypted-storage reads during normal browsing.
+- Add import progress, moved/kept counts, prevention of overlapping imports and a safe Stop action.
+- Preserve per-message encryption and verification before removing shared originals.
 
-- Configurable default notification tone
-- Per-contact notification tones
-- Optional vibration
-- Optional message preview
-- Private/secret notification visibility behavior
-- Notification muting by conversation
-- Android notification-channel handling
-- Notification channels can be rebuilt after tone changes
+### SimpleSMS 1.4.4
 
-### Messaging behavior
+Changes since 1.4.3:
 
-- SMS send
-- SMS receive
-- Multipart SMS support
-- Android Telephony provider integration
-- Sent / failed state handling
-- Optional carrier delivery reports
-- Outbox handling
-- Incoming-message persistence
-- Conversation read state
-- Draft preservation
-- Contact picker for new conversations
-- "Respond via message" support required by Android's default-SMS role
+- Added optional sender/message previews in notifications; details remain hidden by default.
+- Added a notification-action switch, inline replies with app lock off, guarded composer
+  access with app lock on, and single-message deletion with confirmation.
+- Seal inline reply drafts before sending so failed submissions can be recovered.
+- Keep separate notifications tied to their own messages, and replace pending MMS
+  notices when downloads complete.
+- Redact posted previews/actions when an enabled app lock closes the session.
+- Hide MMS content by default behind “Tap to display message,” including list and
+  notification text previews. Added a setting to disable MMS hiding.
+- Added single-tap MMS opening and a built-in viewer for text, supported images,
+  audio and video, with play/pause and seeking. Decrypted media stays in memory.
+- Retained explicit external opening in the long-press menu and all existing storage,
+  encryption, app-lock, migration, theme, archive, gesture and messaging features.
 
-### Privacy controls
 
-- Screenshots and recent-app previews blocked by default with `FLAG_SECURE`
-- Screenshot blocking can be disabled in Settings
-- Keyboard personalized learning disabled by default in message fields
-- Keyboard personalized learning can be enabled manually
-- Application backups disabled
-- Cleartext network traffic disabled
-- No Internet permission
-- No account dependency
-- No cloud dependency
-
----
-
-## Android 15 / Android 16 fixes
-
-Old Android UI code assumes the operating system will politely keep application content away from system bars.
-
-Modern Android laughed at that assumption and shoved applications edge-to-edge.
-
-SimpleSMS includes compatibility fixes for that mess:
-
-- Status-bar insets handled on modern Android
-- Navigation-bar insets handled on modern Android
-- Display-cutout handling added
-- Bottom conversation content kept above the system navigation area
-- Compose / New Message button kept above the navigation bar
-- Top conversation content kept below the application banner
-- Conversation lists use explicit top clearance
-- List children are clipped to their padded content region so the first SMS cannot slide underneath the toolbar
-
-The result is the old AOSP interface without Android 16 trying to eat the first and last message on the screen.
-
----
-
-## Security and privacy reality check
-
-SimpleSMS is a **private SMS client**.
-
-It does **not** make SMS a private protocol.
-
-SMS itself is ancient carrier infrastructure. Messages and metadata pass through the cellular provider. The application cannot magically turn carrier SMS into Signal by deleting an analytics SDK.
-
-The privacy goal is narrower and more useful:
-
-**The SMS network already gets what the SMS network requires. The SMS app does not need to become another data collector on top of it.**
-
-SimpleSMS removes that extra observer.
-
-No fake "military-grade messaging" marketing.
-
-No pretending carrier SMS is end-to-end encrypted.
-
-No privacy theater.
-
-Just fewer parties sticking their hands into data they do not need.
-
----
-
-## RCS
-
-No.
-
-RCS is intentionally not implemented.
-
-SimpleSMS is an SMS application, not an entry point into another provider-operated realtime messaging ecosystem.
-
-If realtime encrypted messaging is required, use a purpose-built end-to-end encrypted messenger.
-
-Trying to bolt every possible communications protocol into one application is how an SMS client turns into a 300 MB service platform with sixteen background processes and a privacy policy longer than a mortgage agreement.
-
----
-
-## Design philosophy
-
-The feature-selection algorithm is extremely complicated:
-
-1. Does an SMS client need it?
-2. Does it improve the SMS client without turning it into a service platform?
-3. Can it operate locally?
-4. Does it respect the user's device instead of treating it as corporate real estate?
-
-If the answer starts sounding like:
-
-> "Well, a cloud backend would allow..."
-
-No.
-
-If the feature requires an analytics SDK to understand whether people use it:
-
-No.
-
-If the feature requires an account for no technical reason:
-
-No.
-
-If the feature exists primarily to increase "engagement":
-
-Absolutely fucking not.
-
-Software is allowed to do its job and then shut up.
-
----
-
-## What SimpleSMS is not
-
-SimpleSMS is not:
-
-- a social network
-- an advertising platform
-- an analytics experiment
-- a cloud storage provider
-- an account ecosystem
-- an RCS client
-- a telemetry collector
-- a behavioral profiling tool
-- a corporate growth funnel
-- an excuse to harvest a contact list
-- an excuse to keep a process connected to the Internet forever
-
-It is an SMS client.
-
-An SMS client should not need a mission statement longer than that, but apparently the software industry required one.
-
----
-
-## Current feature summary
-
-| Feature | Status |
-|---|---|
-| SMS send/receive | Yes |
-| Multipart SMS | Yes |
-| AOSP-style conversation UI | Yes |
-| Contacts integration | Yes |
-| Search | Yes |
-| Archive | Yes |
-| Swipe actions | Configurable |
-| Per-contact colors | Yes |
-| Per-contact notification tones | Yes |
-| Delivery reports | Optional |
-| Dark mode | Yes |
-| UI/DPI scaling | Yes |
-| Screenshot blocking | Default on |
-| Keyboard personalized learning | Default off |
-| Android 7.0 support | Yes |
-| Android 16 display handling | Yes |
-| Internet permission | **No** |
-| Analytics | **No** |
-| Telemetry | **No** |
-| Ads | **No** |
-| Cloud account | **No** |
-| RCS | **No** |
-| MMS transport | **No** |
-| Corporate nonsense | **Actively rejected** |
-
----
-
-## Version notes
-
-# SimpleSMS 1.4.3
+### SimpleSMS 1.4.3
 
 ## Message storage
 
@@ -403,7 +212,7 @@ An SMS client should not need a mission statement longer than that, but apparent
 - Handle duplicate and out-of-order multipart status callbacks.
 - Route explicit read, lock, and delete actions to the correct shared or private message.
 
-### 1.2.3
+### SimpleSMS 1.2.3
 
 - Actual AOSP Messaging-derived UI structure retained
 - SMS-only backend retained
@@ -435,31 +244,22 @@ An SMS client should not need a mission statement longer than that, but apparent
 
 ---
 
-## Licensing
 
-No Faults Software License:
+## Licensing and attribution
 
-https://github.com/ZoKLav/no_fault_license
+Project license: [No Faults Software License](https://github.com/ZoKLav/no_fault_license). AOSP-derived components retain their applicable license notices; the source package includes [LICENSE](LICENSE), [NOTICE-AOSP](NOTICE-AOSP) and [NOTICE-MMS](NOTICE-MMS).
 
-Read the licenses.
+Read the license terms and component notices before redistributing. The older AOSP notice describes the original SMS-only fork; current releases include carrier MMS support.
 
-Yes, actually read them.
+## Design philosophy
 
-"No warranty" does not mean "please open a GitHub issue demanding compensation because a phone from 2017 did something weird."
+Features belong here when they make messaging more useful without requiring an account, a cloud backend or a new reason to collect data. Colors, local contact controls, message organization and private storage meet that test; engagement tracking and advertising do not.
 
----
-
-## Final note
-
-An application should not need to send a status report to a corporation every time somebody taps a button.
-
-SimpleSMS does the boring thing:
-
-**It works locally, handles SMS, and minds its own fucking business.**
+Software is allowed to do its job and then shut up. SimpleSMS should handle your messages and mind its own fucking business.
 
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/1.png" width="45%" alt="Screenshot 1">
-  <img src="screenshots/2.png" width="45%" alt="Screenshot 2">
+  <img src="screenshots/1.png" width="45%" alt="SimpleSMS screenshot 1">
+  <img src="screenshots/2.png" width="45%" alt="SimpleSMS screenshot 2">
 </p>
