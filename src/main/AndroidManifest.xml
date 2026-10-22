@@ -12,6 +12,9 @@
     <application android:name=".security.PrivateApplication" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false"
         android:label="SimpleSMS" android:icon="@drawable/ic_launcher" android:theme="@style/BugleTheme.ConversationListActivity">
         <provider android:name=".security.TransferProvider" android:authorities="${applicationId}.private" android:exported="false" android:grantUriPermissions="true"/>
+        <activity android:name=".ui.conversation.MmsViewerActivity" android:exported="false"/>
+        <activity android:name=".util.NotificationActionActivity" android:exported="false" android:excludeFromRecents="true"/>
+        <receiver android:name=".util.NotificationReplyReceiver" android:exported="false"/>
         <receiver android:name=".sms.MmsResultReceiver" android:exported="false"/>
         <activity android:name=".security.UnlockActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/><category android:name="android.intent.category.APP_MESSAGING"/></intent-filter></activity>
         <activity android:name=".ui.conversationlist.ConversationListActivity" android:exported="true" android:launchMode="singleTop">

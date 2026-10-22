@@ -73,8 +73,8 @@ public final class ConversationActivity extends BaseActivity implements Conversa
     private EditText compose;
     private ImageButton send;
     private ContentObserver observer;private boolean observingShared;
-    private int generation;
     private boolean restoringDraft;
+    private long notificationDraftId;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -94,6 +94,7 @@ public final class ConversationActivity extends BaseActivity implements Conversa
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        loader.invalidate();
         setIntent(intent);
         saveDraft();attachment=null;updateAttachment();
         parseIntent(intent);
@@ -108,6 +109,7 @@ public final class ConversationActivity extends BaseActivity implements Conversa
     @Override
     protected void onResume() {
         super.onResume();
+        loader.resume();
         if(!com.android.messaging.security.Vault.unlocked())return;
         observeShared();
         if (threadId >= 0 && com.android.messaging.security.Vault.unlocked()) {
@@ -121,12 +123,14 @@ public final class ConversationActivity extends BaseActivity implements Conversa
 
     @Override
     protected void onPause() {
+        loader.pause();
         saveDraft();
         super.onPause();
     }
 
     @Override
     protected void onDestroy() {
+        loader.pause();
         if (observer != null) {
             try { getContentResolver().unregisterContentObserver(observer); } catch (Exception ignored) { }
         }
@@ -311,6 +315,7 @@ public final class ConversationActivity extends BaseActivity implements Conversa
                     compose.setText("");
                     restoringDraft = false;
                     AppPrefs.p(this).edit().remove(oldDraftKey).apply();
+                    if(notificationDraftId>0)try{com.android.messaging.security.Vault.erase(this,notificationDraftId);notificationDraftId=0;}catch(Exception ignored){}
                     compose.setEnabled(true);attach.setEnabled(true);
                     send.setEnabled(false);
                     adapter = new ConversationMessageAdapter(address, this);
@@ -338,24 +343,18 @@ public final class ConversationActivity extends BaseActivity implements Conversa
         } catch (Exception ignored) { }
     }
 
-    private void loadMessages() {
-        if (threadId < 0 || !com.android.messaging.security.Vault.unlocked()) return;
-        final int g = ++generation;
-        new Thread(() -> {
-            List<SmsRepository.Message> data;
-            try { data = SmsRepository.messages(this, threadId); } catch (Exception failure) { runOnUiThread(() -> { if(g==generation)Toast.makeText(this,"Could not read messages: "+failure.getMessage(),Toast.LENGTH_LONG).show(); }); return; }
-            final List<SmsRepository.Message> out = data;
-            runOnUiThread(() -> {
-                if (g != generation) return;
-                adapter.setItems(out);
-                if (adapter.getItemCount() > 0) messageList.scrollToPosition(adapter.getItemCount() - 1);
-            });
-        }, "sms-thread").start();
-    }
+    private final com.android.messaging.util.MessageLoader<List<SmsRepository.Message>> loader =
+        new com.android.messaging.util.MessageLoader<>(() -> threadId < 0 ? null : SmsRepository.messages(this, threadId), (out, failure) -> {
+            if (failure != null) { Toast.makeText(this, "Could not read messages: " + failure.getMessage(), Toast.LENGTH_LONG).show(); return; }
+            if (out == null) return;
+            adapter.setItems(out);
+            if (adapter.getItemCount() > 0) messageList.scrollToPosition(adapter.getItemCount() - 1);
+        });
+    private void loadMessages() { loader.request(); }
 
     @Override
     public void menu(SmsRepository.Message message) {
-        java.util.ArrayList<String> actions=new java.util.ArrayList<>();actions.add("Copy text");actions.add(message.locked?"Unlock message":"Lock message");actions.add("Delete message");if(message.pending)actions.add("Download MMS");for(SmsRepository.Part part:message.parts)actions.add("Open "+part.mime);
+        java.util.ArrayList<String> actions=new java.util.ArrayList<>();actions.add("Copy text");actions.add(message.locked?"Unlock message":"Lock message");actions.add("Delete message");if(message.pending)actions.add("Download MMS");for(SmsRepository.Part part:message.parts)actions.add("Open externally: "+part.mime);
         new AlertDialog.Builder(this).setItems(actions.toArray(new String[0]),(d,w)->{
             if(w==0){ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("Message",message.body));}
             else if(w==1)operation(()->SmsRepository.setLocked(this,message,!message.locked));
@@ -363,6 +362,14 @@ public final class ConversationActivity extends BaseActivity implements Conversa
             else if(message.pending&&w==3)operation(()->com.android.messaging.sms.MmsTransport.download(this,message));
             else {SmsRepository.Part part=message.parts.get(w-3-(message.pending?1:0));new AlertDialog.Builder(this).setTitle("Open attachment?").setMessage("The selected viewer receives decrypted media and may keep its own copy.").setPositiveButton("Open",(dd,ww)->{try{byte[] bytes=com.android.messaging.sms.SharedMessages.attachment(this,part);Uri uri=com.android.messaging.security.TransferProvider.outgoing(this,bytes,part.mime);startActivity(new Intent(Intent.ACTION_VIEW).setDataAndType(uri,part.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));}catch(Exception e){Toast.makeText(this,"No compatible media viewer",Toast.LENGTH_LONG).show();}}).setNegativeButton("Cancel",null).show();}
         }).show();
+    }
+    @Override public void display(SmsRepository.Message message) {
+        if(message.pending) {
+            new AlertDialog.Builder(this).setTitle("Download MMS?")
+                .setMessage("Download this message from your carrier. Tap the downloaded message to display it.")
+                .setPositiveButton("Download",(d,w)->operation(()->com.android.messaging.sms.MmsTransport.download(this,message)))
+                .setNegativeButton("Cancel",null).show();
+        } else startActivity(new Intent(this,MmsViewerActivity.class).putExtra("message_id",message.id));
     }
     private interface Work{void run()throws Exception;}
     private void operation(Work work){new Thread(()->{try{work.run();runOnUiThread(this::loadMessages);}catch(Exception e){runOnUiThread(()->Toast.makeText(this,"Operation failed: "+e.getMessage(),Toast.LENGTH_LONG).show());}},"private-message-action").start();}
@@ -408,7 +415,10 @@ public final class ConversationActivity extends BaseActivity implements Conversa
     }
 
     private void restoreDraft() {
-        String prefill = getIntent().getStringExtra("sms_body");
+        long replyId=getIntent().getLongExtra("notification_reply_id",0);
+        String prefill=null;notificationDraftId=0;
+        if(replyId!=0)try{org.json.JSONObject draft=com.android.messaging.util.NotificationDrafts.latest(this,replyId);if(draft!=null){prefill=draft.optString("body");notificationDraftId=draft.getLong("_id");}}catch(Exception e){Toast.makeText(this,"Could not recover notification reply",Toast.LENGTH_LONG).show();}
+        if(prefill==null)prefill = getIntent().getStringExtra("sms_body");
         if (prefill == null) prefill = getIntent().getStringExtra(Intent.EXTRA_TEXT);
         String value = prefill != null ? prefill : AppPrefs.p(this).getString(AppPrefs.draftKey(threadId, address), "");
         restoringDraft = true;

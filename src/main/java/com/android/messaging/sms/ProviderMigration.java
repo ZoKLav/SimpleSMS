@@ -14,14 +14,36 @@ public final class ProviderMigration {
  private ProviderMigration(){}
  private static final String[] SMS={"_id","address","body","date","type","read","status","locked","thread_id"};
  private static final String[] MMS={"_id","date","msg_box","read","locked","m_type","ct_l","tr_id","sub_id","sub","sub_cs","thread_id"};
- public static void confirm(Activity a){new AlertDialog.Builder(a).setTitle("Move shared messages into SimpleSMS?").setMessage("Copies existing SMS/MMS into encrypted private storage, verifies each copy, then removes that original from Android's shared database. Other messaging apps will no longer see moved messages. Locked originals and active sends are skipped. There is no backup or undo. Existing app drafts/settings are encrypted separately on unlock.").setPositiveButton("Move messages",(d,w)->{ProgressDialog progress=ProgressDialog.show(a,"Moving messages","Keep SimpleSMS open and the device unlocked",true,false);new Thread(()->{String text;try{text=move(a);}catch(Exception e){text="Move stopped: "+e.getMessage()+". Originals not yet verified remain in shared storage.";}String result=text;a.runOnUiThread(()->{progress.dismiss();new AlertDialog.Builder(a).setTitle("Message move").setMessage(result).setPositiveButton("OK",null).show();});},"private-message-move").start();}).setNegativeButton("Cancel",null).show();}
- private static String move(Context c)throws Exception{
-  Vault.require();if(!SmsRole.isDefault(c))throw new SecurityException("Set SimpleSMS as the default SMS app first");int moved=0,kept=0;Map<String,Long> prior=new HashMap<>();for(SmsRepository.Message m:SmsRepository.messages(c,-1))if(!m.shared&&m.source!=null)prior.put(m.source,m.id);
+ private static final java.util.concurrent.atomic.AtomicBoolean moving=new java.util.concurrent.atomic.AtomicBoolean();
+ public static boolean isMoving(){return moving.get();}
+ private interface Progress { void update(String phase,int completed,int total,int moved,int kept); }
+ public static void confirm(Activity a){
+  if(isMoving()){new AlertDialog.Builder(a).setMessage("A message move is already running.").setPositiveButton("OK",null).show();return;}
+  new AlertDialog.Builder(a).setTitle("Move shared messages into SimpleSMS?").setMessage("Copies existing SMS/MMS into encrypted private storage, verifies each copy, then removes that original from Android's shared database. Other messaging apps will no longer see moved messages. Locked originals and active sends are skipped. There is no backup or undo. Stop finishes the current message safely. If app lock expires, unlock and run the move again to continue.").setPositiveButton("Move messages",(d,w)->{
+   if(!moving.compareAndSet(false,true))return;
+   java.util.concurrent.atomic.AtomicBoolean stop=new java.util.concurrent.atomic.AtomicBoolean();
+   ProgressDialog progress=new ProgressDialog(a);progress.setTitle("Moving messages");progress.setMessage("Preparing encrypted history…");progress.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);progress.setIndeterminate(true);progress.setCancelable(false);
+   progress.setButton(AlertDialog.BUTTON_NEGATIVE,"Stop",(dialog,which)->{});progress.show();
+   progress.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(v->{stop.set(true);progress.setMessage("Stopping after the current message…");progress.getButton(AlertDialog.BUTTON_NEGATIVE).setEnabled(false);});
+   android.os.Handler handler=new android.os.Handler(android.os.Looper.getMainLooper());
+   Object progressToken=new Object();
+   Progress report=(phase,completed,total,moved,kept)->{
+    handler.removeCallbacksAndMessages(progressToken);
+    handler.postAtTime(()->{if(a.isFinishing()||a.isDestroyed()||stop.get())return;progress.setIndeterminate(false);progress.setMax(Math.max(1,total));progress.setProgress(completed);progress.setMessage(phase+": "+completed+" / "+total+" checked · "+moved+" moved · "+kept+" kept");},progressToken,android.os.SystemClock.uptimeMillis());
+   };
+   new Thread(()->{String text;Context app=a.getApplicationContext();try{text=move(app,stop,report);}catch(Exception e){text="Move stopped: "+e.getMessage()+". Originals not yet verified remain in shared storage. Unlock and run the move again to continue.";}finally{moving.set(false);handler.removeCallbacksAndMessages(progressToken);app.getContentResolver().notifyChange(Vault.changes(app),null);}
+    String result=text;a.runOnUiThread(()->{if(a.isFinishing()||a.isDestroyed())return;progress.dismiss();new AlertDialog.Builder(a).setTitle("Message move").setMessage(result).setPositiveButton("OK",null).show();});
+   },"private-message-move").start();
+  }).setNegativeButton("Cancel",null).show();
+ }
+ private static String move(Context c,java.util.concurrent.atomic.AtomicBoolean stop,Progress report)throws Exception{
+  Vault.require();if(!SmsRole.isDefault(c))throw new SecurityException("Set SimpleSMS as the default SMS app first");int moved=0,kept=0;Map<String,Long> prior=privateSources(c);
   for(boolean mms:new boolean[]{false,true}){Uri base=mms?Uri.parse("content://mms"):Telephony.Sms.CONTENT_URI;String[] projection=mms?MMS:SMS;List<Long> ids=new ArrayList<>();try(Cursor rows=c.getContentResolver().query(base,new String[]{"_id"},null,null,"_id ASC")){if(rows!=null)while(rows.moveToNext())ids.add(rows.getLong(0));}
-   for(long id:ids){Vault.require();Uri row=ContentUris.withAppendedId(base,id);JSONObject record;String originalPayload;String before;String selection;String[] selectionArgs;
+   int completed=0;report.update(mms?"MMS":"SMS",0,ids.size(),moved,kept);
+   for(long id:ids){if(stop.get())return "Stopped safely. Moved "+moved+" messages; kept "+kept+" originals. Run the move again to continue.";report.update(mms?"MMS":"SMS",completed++,ids.size(),moved,kept);Vault.require();Uri row=ContentUris.withAppendedId(base,id);JSONObject record;String originalPayload;String before;String selection;String[] selectionArgs;
     try(Cursor x=c.getContentResolver().query(row,projection,null,null,null)){if(x==null||!x.moveToFirst())continue;if(x.getInt(mms?4:7)!=0||x.getInt(mms?2:4)==4||(!mms&&x.getInt(4)==6)){kept++;continue;}StringBuilder where=new StringBuilder();List<String> args=new ArrayList<>();for(int n=0;n<projection.length;n++){if(n>0)where.append(" AND ");where.append(projection[n]);if(x.isNull(n))where.append(" IS NULL");else{where.append("=?");args.add(x.getString(n));}}selection=where.toString();selectionArgs=args.toArray(new String[0]);before=signature(x);record=mms?mms(c,x):sms(x);originalPayload=canonical(record);}
     long oldThread=record.optLong("legacy_thread",-1),newThread=Vault.thread(record.optString("address"));
-    if(oldThread>=0){if(com.android.messaging.util.AppPrefs.isArchived(c,oldThread))com.android.messaging.util.AppPrefs.archive(c,newThread,true);String oldDraft=com.android.messaging.util.AppPrefs.draftKey(oldThread,record.optString("address"));String newDraft=com.android.messaging.util.AppPrefs.draftKey(newThread,record.optString("address"));String draft=com.android.messaging.util.AppPrefs.p(c).getString(oldDraft,"");if(!draft.isEmpty()&&com.android.messaging.util.AppPrefs.p(c).getString(newDraft,"").isEmpty())com.android.messaging.util.AppPrefs.p(c).edit().putString(newDraft,draft).remove(oldDraft).apply();}
+    if(oldThread>=0){if(com.android.messaging.util.AppPrefs.isArchived(c,oldThread)&&!com.android.messaging.util.AppPrefs.isArchived(c,newThread))com.android.messaging.util.AppPrefs.archive(c,newThread,true);String oldDraft=com.android.messaging.util.AppPrefs.draftKey(oldThread,record.optString("address"));String newDraft=com.android.messaging.util.AppPrefs.draftKey(newThread,record.optString("address"));String draft=com.android.messaging.util.AppPrefs.p(c).getString(oldDraft,"");if(!draft.isEmpty()&&com.android.messaging.util.AppPrefs.p(c).getString(newDraft,"").isEmpty())com.android.messaging.util.AppPrefs.p(c).edit().putString(newDraft,draft).remove(oldDraft).apply();}
     String source=(mms?"mms:":"sms:")+id;record.put("source",source);record.put("source_signature",before);long stored=prior.containsKey(source)?prior.get(source):SmsRepository.store(c,record);
     // A full read/authentication of ciphertext must succeed before the provider delete.
     JSONObject verified=Vault.verify(c,stored);
@@ -32,7 +54,17 @@ public final class ProviderMigration {
     try(Cursor current=c.getContentResolver().query(row,projection,null,null,null)){if(current==null||!current.moveToFirst())continue;if(!signature(current).equals(before)){kept++;continue;}if(mms&&!canonical(mms(c,current)).equals(originalPayload)){kept++;continue;}}
     int count=c.getContentResolver().delete(row,selection,selectionArgs);if(count>0)moved++;else kept++;
    }
+   report.update(mms?"MMS":"SMS",completed,ids.size(),moved,kept);
   }return "Moved "+moved+" messages. Kept "+kept+" locked, changed or unverified originals in shared storage.";
+ }
+ /** Build retry identities without reading every shared MMS or running transport cleanup. */
+ private static Map<String,Long> privateSources(Context c)throws Exception{
+  Map<Long,JSONObject> messages=new LinkedHashMap<>();
+  for(JSONObject r:Vault.records(c)){
+   if("message".equals(r.optString("kind")))messages.put(r.getLong("_id"),r);
+   else if("event".equals(r.optString("kind"))){JSONObject m=messages.get(r.optLong("message"));JSONObject flags=r.optJSONObject("flags");if(m!=null&&flags!=null&&flags.has("deleted"))m.put("deleted",flags.get("deleted"));}
+  }
+  Map<String,Long> out=new HashMap<>();for(JSONObject r:messages.values())if(!r.optBoolean("deleted")&&r.has("source"))out.put(r.getString("source"),r.getLong("_id"));return out;
  }
  /** Only messages created under the explicit private-traffic policy are eligible. */
  public static void cleanNew(Context c,long stored)throws Exception{

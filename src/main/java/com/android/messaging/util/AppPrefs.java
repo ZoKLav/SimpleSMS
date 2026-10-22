@@ -30,6 +30,8 @@ public final class AppPrefs {
     public static String swipeRight(Context c){return p(c).getString("swipe_right",READ);}
     public static boolean notifications(Context c){return p(c).getBoolean("notifications",true);}
     public static boolean preview(Context c){return p(c).getBoolean("preview",false);}
+    public static boolean notificationActions(Context c){return p(c).getBoolean("notification_actions",true);}
+    public static boolean hideMms(Context c){return p(c).getBoolean("hide_mms",true);}
     public static boolean vibrate(Context c){return p(c).getBoolean("vibrate",true);}
     public static boolean deliveryReports(Context c){return p(c).getBoolean("delivery",false);}
     public static boolean sendSound(Context c){return p(c).getBoolean("send_sound",true);}

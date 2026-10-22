@@ -65,7 +65,10 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         row("UI scale (DPI)", AppPrefs.scale(this) + "%", this::chooseScale);
 
         section("Privacy & messaging");
-        row("Notifications", "Generic notifications only; use Android settings for sound and visibility", () -> startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()))));
+        row("Notifications", "Android notification sound and lock-screen visibility", () -> startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()))));
+        toggle("Show notification details", "Show sender and SMS text in Android notifications. With app lock on, previews require an unlocked app session.", AppPrefs.preview(this), "preview", false);
+        toggle("Notification reply and delete", "Reply from the shade with app lock off; unlock to reply with app lock on. Delete asks for confirmation.", AppPrefs.notificationActions(this), "notification_actions", false);
+        toggle("Hide MMS content", "Show Tap to display message until you open it. Also hides MMS text in lists and notifications.", AppPrefs.hideMms(this), "hide_mms", false);
         privateStorageToggle();
         row("Move existing SMS/MMS", "Encrypt existing shared messages, verify, then remove each original", () -> com.android.messaging.sms.ProviderMigration.confirm(this));
         boolean appLock=com.android.messaging.security.VaultKeys.lockEnabled(this);
@@ -75,7 +78,7 @@ public final class ApplicationSettingsActivity extends BaseActivity {
                 .setPositiveButton(appLock?"Turn off":"Enable",(d,w)->startActivity(new Intent(this,com.android.messaging.security.UnlockActivity.class).putExtra("lock_mode",appLock?"off":"on")))
                 .setNegativeButton("Cancel",null).show();
         });
-        if(appLock)row("Lock now", "Clear unlocked caches and return to device authentication", () -> {com.android.messaging.security.Vault.lock();startActivity(new Intent(this,com.android.messaging.security.UnlockActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));finish();});
+        if(appLock)row("Lock now", "Clear unlocked caches and return to device authentication", () -> {com.android.messaging.security.Vault.lock();NotificationHelper.redact(this);startActivity(new Intent(this,com.android.messaging.security.UnlockActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));finish();});
 
         section("Gestures");
         row("Swipe left", actionLabel(AppPrefs.swipeLeft(this)), () -> chooseAction("swipe_left"));
@@ -142,7 +145,7 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         TextView t = new TextView(this); t.setText(title); t.setTextSize(16); t.setTextColor(AppPrefs.isDark(this) ? 0xfff5f5f5 : 0xde000000); labels.addView(t);
         TextView s = new TextView(this); s.setText(summary); s.setTextSize(14); s.setTextColor(AppPrefs.isDark(this) ? 0xffbdbdbd : 0x8a000000); labels.addView(s);
         row.addView(labels, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        Switch sw = new Switch(this); sw.setChecked(value); sw.setOnCheckedChangeListener((button, checked) -> { AppPrefs.setBool(this, key, checked); if (recreate) recreate(); }); row.addView(sw);
+        Switch sw = new Switch(this); sw.setChecked(value); sw.setOnCheckedChangeListener((button, checked) -> { AppPrefs.setBool(this, key, checked); if ("preview".equals(key) || "notification_actions".equals(key) || "hide_mms".equals(key)) NotificationHelper.clearMessages(this); if (recreate) recreate(); }); row.addView(sw);
         content.addView(row);
     }
 

@@ -11,7 +11,9 @@ import java.util.*;
 /** SQLite stores only opaque ids and authenticated encrypted blobs, including all indexes/metadata. */
 public final class Vault {
  private static Db db;private static PublicKey publicKey;private static long authenticatedAt;private static byte[] groupKey;
- private static final Map<Long,JSONObject> cache=new HashMap<>();private static EncryptedPrefs prefs;private static boolean sessionLocked=true;
+ private static final Map<Long,JSONObject> cache=new HashMap<>();
+ // All record mutations go through this class; unlock loads once and writes maintain the cache.
+ private static final Map<String,Long> threads=new LinkedHashMap<String,Long>(128,0.75f,true){protected boolean removeEldestEntry(Map.Entry<String,Long> e){return size()>2048;}};private static EncryptedPrefs prefs;private static boolean sessionLocked=true;
  private Vault(){}
  private static final class Db extends SQLiteOpenHelper {
   Db(Context c){super(c,"private-v1.db",null,1);}
@@ -21,7 +23,7 @@ public final class Vault {
  private static void init(Context c)throws Exception{if(publicKey==null)publicKey=VaultKeys.publicKey(c);if(db==null)db=new Db(c.getApplicationContext());}
  public static synchronized boolean unlocked(){return authenticatedAt!=0&&(!sessionLocked||SystemClock.elapsedRealtime()-authenticatedAt<240000)&&groupKey!=null;}
  public static synchronized void require(){if(!unlocked())throw new SecurityException("Unlock SimpleSMS to read encrypted storage");}
- public static synchronized void lock(){authenticatedAt=0;if(groupKey!=null)Arrays.fill(groupKey,(byte)0);groupKey=null;cache.clear();if(prefs!=null){EncryptedPrefs old=prefs;new android.os.Handler(android.os.Looper.getMainLooper()).post(old::forget);}prefs=null;}
+ public static synchronized void lock(){authenticatedAt=0;if(groupKey!=null)Arrays.fill(groupKey,(byte)0);groupKey=null;cache.clear();threads.clear();if(prefs!=null){EncryptedPrefs old=prefs;new android.os.Handler(android.os.Looper.getMainLooper()).post(old::forget);}prefs=null;}
  public static synchronized void unlock(Context c)throws Exception{
   lock();init(c);SQLiteDatabase d=db.getWritableDatabase();
   try(Cursor x=d.rawQuery("SELECT COUNT(*) FROM records",null)){x.moveToFirst();if(x.getLong(0)==0){byte[] key=new byte[32];new SecureRandom().nextBytes(key);JSONObject config=new JSONObject().put("kind","config").put("group",android.util.Base64.encodeToString(key,android.util.Base64.NO_WRAP));append(c,config);Arrays.fill(key,(byte)0);}}
@@ -37,7 +39,7 @@ public final class Vault {
    Set<Long> existing=new HashSet<>();while(x.moveToNext()){long id=x.getLong(0);existing.add(id);if(cache.containsKey(id))continue;java.io.ByteArrayOutputStream encrypted=new java.io.ByteArrayOutputStream();encrypted.write(x.getBlob(1));try(Cursor chunks=db.getReadableDatabase().query("chunks",new String[]{"blob"},"record=?",new String[]{""+id},null,null,"position ASC")){while(chunks.moveToNext())encrypted.write(chunks.getBlob(0));}byte[] plain=VaultKeys.open(c,encrypted.toByteArray());try{JSONObject value=new JSONObject(new String(plain,StandardCharsets.UTF_8));if(value.getLong("_id")!=id)throw new GeneralSecurityException("Encrypted record identity mismatch");cache.put(id,value);}finally{Arrays.fill(plain,(byte)0);}}cache.keySet().retainAll(existing);
   }
  }
- public static synchronized List<JSONObject> records(Context c)throws Exception{require();init(c);try{load(c);}catch(Exception e){lock();throw e;}List<JSONObject> out=new ArrayList<>();List<Long> ids=new ArrayList<>(cache.keySet());Collections.sort(ids);for(long id:ids)out.add(new JSONObject(cache.get(id).toString()));return out;}
+ public static synchronized List<JSONObject> records(Context c)throws Exception{require();init(c);List<JSONObject> out=new ArrayList<>();List<Long> ids=new ArrayList<>(cache.keySet());Collections.sort(ids);for(long id:ids)out.add(new JSONObject(cache.get(id).toString()));return out;}
  public static synchronized long append(Context c,JSONObject value)throws Exception{
   init(c);SQLiteDatabase d=db.getWritableDatabase();d.beginTransaction();long id;JSONObject copy=new JSONObject(value.toString());
   try{ContentValues empty=new ContentValues();empty.put("blob",new byte[0]);id=d.insertOrThrow("records",null,empty);copy.put("_id",id);byte[] plain=copy.toString().getBytes(StandardCharsets.UTF_8);byte[] sealed;try{sealed=Envelope.seal(publicKey,plain);}finally{Arrays.fill(plain,(byte)0);}ContentValues v=new ContentValues();v.put("blob",Arrays.copyOf(sealed,Math.min(sealed.length,65536)));int position=0;for(int at=65536;at<sealed.length;at+=65536){ContentValues chunk=new ContentValues();chunk.put("record",id);chunk.put("position",position++);chunk.put("blob",Arrays.copyOfRange(sealed,at,Math.min(sealed.length,at+65536)));d.insertOrThrow("chunks",null,chunk);}if(d.update("records",v,"_id=?",new String[]{""+id})!=1)throw new java.io.IOException("Encrypted record write failed");d.setTransactionSuccessful();}finally{d.endTransaction();}
@@ -79,7 +81,7 @@ public final class Vault {
   byte[] plain=VaultKeys.open(c,encrypted.toByteArray());try{JSONObject result=new JSONObject(new String(plain,StandardCharsets.UTF_8));if(result.getLong("_id")!=id)throw new GeneralSecurityException("Encrypted record identity mismatch");return result;}finally{Arrays.fill(plain,(byte)0);}
  }
  public static synchronized void event(Context c,long id,JSONObject flags)throws Exception{append(c,new JSONObject().put("kind","event").put("message",id).put("flags",flags));}
- public static synchronized long thread(String address)throws Exception{require();javax.crypto.Mac mac=javax.crypto.Mac.getInstance("HmacSHA256");mac.init(new javax.crypto.spec.SecretKeySpec(groupKey,"HmacSHA256"));byte[] digest=mac.doFinal(canonical(address).getBytes(StandardCharsets.UTF_8));long id=java.nio.ByteBuffer.wrap(digest).getLong()&Long.MAX_VALUE;return id==0?1:id;}
+ public static synchronized long thread(String address)throws Exception{require();Long cached=threads.get(address);if(cached!=null)return cached;javax.crypto.Mac mac=javax.crypto.Mac.getInstance("HmacSHA256");mac.init(new javax.crypto.spec.SecretKeySpec(groupKey,"HmacSHA256"));byte[] digest=mac.doFinal(canonical(address).getBytes(StandardCharsets.UTF_8));long id=java.nio.ByteBuffer.wrap(digest).getLong()&Long.MAX_VALUE;long result=id==0?1:id;threads.put(address,result);return result;}
  public static String canonical(String address){TreeSet<String> group=new TreeSet<>();for(String a:(address==null?"Unknown":address).split("[,;]")){a=a.trim();String n=android.telephony.PhoneNumberUtils.normalizeNumber(a);group.add(a.contains("@")?"e:"+a.toLowerCase(java.util.Locale.US):n!=null&&!n.isEmpty()?"p:"+n:"u:"+a.toLowerCase(java.util.Locale.US));}return android.text.TextUtils.join(",",group);}
  public static synchronized SharedPreferences preferences(Context c){if(!unlocked()||prefs==null)return EncryptedPrefs.locked();return prefs;}
  public static Uri changes(Context c){return Uri.parse("content://"+c.getPackageName()+".private/messages");}
