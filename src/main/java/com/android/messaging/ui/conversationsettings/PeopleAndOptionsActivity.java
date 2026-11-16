@@ -15,11 +15,11 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.Switch;
+import androidx.appcompat.widget.SwitchCompat;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import android.support.v7.app.ActionBar;
+import androidx.appcompat.app.ActionBar;
 
 import com.android.messaging.R;
 import com.android.messaging.util.AppPrefs;
@@ -44,8 +44,8 @@ public final class PeopleAndOptionsActivity extends BaseActivity {
         if(address==null&&com.android.messaging.security.Vault.unlocked())try{address=com.android.messaging.sms.SmsRepository.address(this,threadId);}catch(Exception ignored){}
         if (address == null || address.trim().isEmpty()) { finish(); return; }
         content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
-        content.setBackgroundColor(AppPrefs.isDark(this) ? 0xff212121 : 0xfffafafa);
-        setContentView(content);
+        content.setBackgroundColor(AppPrefs.isDark(this) ? AppPrefs.darkSurface(this,0) : 0xfff3f6f7);
+        android.widget.ScrollView scroll=new android.widget.ScrollView(this);scroll.addView(content);setContentView(scroll);
         configureActionBar(); populate();
     }
 
@@ -64,6 +64,11 @@ public final class PeopleAndOptionsActivity extends BaseActivity {
 
     private void populate() {
         content.removeAllViews();
+        if(ContactResolver.singleNumber(address))row("Add to contacts",address,()->ContactResolver.addToContacts(this,address));
+        toggle("Mute notifications","Keep messages without notification alerts",AppPrefs.muted(this,address));
+        row("Notification sound",toneLabel(AppPrefs.tone(this,address)),this::pickTone);
+        if(AppPrefs.hasContactTone(this,address))row("Use default notification sound","Follow the app-wide sound",()->{AppPrefs.clearContactTone(this,address);populate();});
+        if(android.os.Build.VERSION.SDK_INT>=26)row("Android notification settings","Sound, vibration and visibility for this conversation",()->NotificationHelper.openSettings(this,address));
         row("Conversation color", UiUtil.hex(AppPrefs.conversationColor(this, address)), this::chooseColor);
         if (threadId >= 0) row(AppPrefs.isArchived(this, threadId) ? "Unarchive conversation" : "Archive conversation",
                 "Archived conversations stay out of the main list", () -> { AppPrefs.archive(this, threadId, !AppPrefs.isArchived(this, threadId)); populate(); });
@@ -74,23 +79,23 @@ public final class PeopleAndOptionsActivity extends BaseActivity {
         View v = getLayoutInflater().inflate(R.layout.settings_item_view, content, false);
         TextView t = v.findViewById(R.id.title), s = v.findViewById(R.id.summary);
         t.setText(title); s.setText(summary);
-        if (AppPrefs.isDark(this)) { t.setTextColor(0xfff5f5f5); s.setTextColor(0xffbdbdbd); }
+        if (AppPrefs.isDark(this)) { t.setTextColor(0xffedf2f6); s.setTextColor(0xffd5dce2); }
         v.setOnClickListener(x -> click.run()); content.addView(v);
     }
 
     private void toggle(String title, String summary, boolean checked) {
         LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(UiUtil.dp(this,16),UiUtil.dp(this,8),UiUtil.dp(this,12),UiUtil.dp(this,8));
         LinearLayout labels = new LinearLayout(this); labels.setOrientation(LinearLayout.VERTICAL);
-        TextView t = new TextView(this); t.setText(title); t.setTextSize(16); t.setTextColor(AppPrefs.isDark(this)?0xfff5f5f5:0xde000000); labels.addView(t);
-        TextView s = new TextView(this); s.setText(summary); s.setTextSize(14); s.setTextColor(AppPrefs.isDark(this)?0xffbdbdbd:0x8a000000); labels.addView(s);
+        TextView t = new TextView(this); t.setText(title); t.setTextSize(16); t.setTextColor(AppPrefs.isDark(this)?0xffedf2f6:0xde000000); labels.addView(t);
+        TextView s = new TextView(this); s.setText(summary); s.setTextSize(14); s.setTextColor(AppPrefs.isDark(this)?0xffd5dce2:0x8a000000); labels.addView(s);
         row.addView(labels,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
-        Switch sw = new Switch(this); sw.setChecked(checked); sw.setOnCheckedChangeListener((b,v)->AppPrefs.setMuted(this,address,v)); row.addView(sw); content.addView(row);
+        SwitchCompat sw = new SwitchCompat(this); sw.setChecked(checked); sw.setOnCheckedChangeListener((b,v)->AppPrefs.setMuted(this,address,v)); row.addView(sw); content.addView(row);
     }
 
     private void chooseColor() {
         String[] labels = {"App default", "AOSP blue", "Slate", "Indigo", "Teal", "Green", "Orange", "Red", "Purple", "Pink", "Custom hex…"};
         int[] colors = {0xff039be5,0xff607d8b,0xff3f51b5,0xff008577,0xff558b2f,0xffef6c00,0xffc62828,0xff7e57c2,0xffad1457};
-        new AlertDialog.Builder(this).setTitle("Conversation color").setItems(labels, (d, which) -> {
+        new com.android.messaging.util.ScreenDialog.Builder(this).setTitle("Conversation color").setItems(labels, (d, which) -> {
             if (which == 0) { AppPrefs.clearConversationColor(this,address); recreate(); }
             else if (which <= colors.length) { AppPrefs.setConversationColor(this,address,colors[which-1]); recreate(); }
             else customColor();
@@ -99,7 +104,7 @@ public final class PeopleAndOptionsActivity extends BaseActivity {
 
     private void customColor() {
         EditText input = new EditText(this); input.setSingleLine(true); input.setInputType(InputType.TYPE_CLASS_TEXT); input.setText(UiUtil.hex(AppPrefs.conversationColor(this,address))); input.setSelection(input.length());
-        new AlertDialog.Builder(this).setTitle("Conversation color — hex").setView(input)
+        new com.android.messaging.util.ScreenDialog.Builder(this).setTitle("Conversation color — hex").setView(input)
                 .setPositiveButton("Set",(d,w)->{try{int c=Color.parseColor(input.getText().toString().trim());AppPrefs.setConversationColor(this,address,0xff000000|(c&0x00ffffff));recreate();}catch(Exception e){Toast.makeText(this,"Use #RRGGBB",Toast.LENGTH_SHORT).show();}})
                 .setNegativeButton("Cancel",null).show();
     }
@@ -110,14 +115,14 @@ public final class PeopleAndOptionsActivity extends BaseActivity {
         i.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT,true);
         i.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT,true);
         i.putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,AppPrefs.tone(this,address));
-        startActivityForResult(i,PICK_TONE);
+        try{startActivityForResult(i,PICK_TONE);}catch(android.content.ActivityNotFoundException unavailable){Toast.makeText(this,"No sound picker available",Toast.LENGTH_LONG).show();}
     }
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
         if(requestCode!=PICK_TONE||resultCode!=RESULT_OK||data==null)return;
         Uri uri=data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);
-        AppPrefs.setContactTone(this,address,uri==null?AppPrefs.SILENT:uri.toString()); NotificationHelper.clearChannels(this); populate();
+        AppPrefs.setContactTone(this,address,uri==null?AppPrefs.SILENT:uri.toString()); populate();
     }
 
     private String toneLabel(Uri uri) {

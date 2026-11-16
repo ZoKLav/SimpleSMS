@@ -1,1 +1,37 @@
-<resources><string name="app_name">SimpleSMS</string><string name="start_new_conversation">Start new conversation</string><string name="no_conversations">No conversations</string><string name="archived">Archived</string><string name="settings">Settings</string></resources>
+<resources>
+    <string name="app_name">SimpleSMS</string>
+    <string name="start_new_conversation">Start new conversation</string>
+    <string name="no_conversations">No conversations</string>
+    <string name="archived">Archived</string>
+    <string name="settings">Settings</string>    <string name="outgoing_preview">You: %1$s</string>
+    <string name="attachment_label">%1$s · %2$s</string>
+    <string name="attachment">Attachment</string>
+    <string name="search">Search</string>
+    <string name="text_app_lock_is_optional_private_messages_attachments">App lock is optional. Private messages, attachments, drafts and preferences stay encrypted in either mode. With app lock off, the app can use its key without another credential prompt; rely on your device\'s access controls. Shared Android messages remain in their existing storage. Carrier SMS/MMS is not end-to-end encrypted.</string>
+    <string name="text_turn_off_app_lock">Turn off app lock</string>
+    <string name="text_device_security_settings">Device security settings</string>
+    <string name="text_optional_private_sms_mms_storage_and_optional">Optional private SMS/MMS storage and optional app lock. New traffic uses Android storage unless Private message storage is enabled. Keystore keys are generated on this device and are not embedded in the APK. No backups, accounts or analytics. Carrier SMS/MMS is not end-to-end encrypted. Existing shared SMS/MMS and earlier private messages stay visible in either mode. Turning private storage off does not export earlier private data. Shared originals stay in Android storage unless you explicitly move or delete them.</string>
+    <string name="text_private_message_storage">Private message storage</string>
+    <string name="text_warning_enabling_this_removes_new_incoming_and">WARNING: Enabling this removes new incoming and outgoing SMS/MMS from Android\'s shared message store after the private encrypted copy is verified. These messages are then managed solely by SimpleSMS and will not be available to other SMS apps. Clearing app data, uninstalling, or losing the encryption key can permanently lose them. Existing history is not moved by this switch.</string>
+    <string name="text_could_not_read_messages_check_sms_permission">Could not read messages. Check SMS permission and try reopening the app.</string>
+    <string name="text_allow_sms_access_to_display_your_existing">Allow SMS access to display your existing messages.</string>
+    <string name="text_symbol_12">+</string>
+    <string name="text_symbol_13">×</string>
+    <string name="text_loading_attachment">Loading attachment…</string>
+    <string name="text_play">Play</string>
+    <string name="text_pause">Pause</string>
+    <string name="text_symbol_17">+</string>
+    <string name="text_attach_media_long_press_to_remove">Attach media; long press to remove</string>
+    <string name="text_text_message">Text message</string>
+    <string name="text_send">Send</string>
+    <string name="text_to">To</string>
+    <string name="text_enter_name_or_number">Enter name or number</string>
+    <string name="text_contacts">Contacts</string>
+    <string name="dark_shade_title">Dark background shade</string>
+    <string name="dark_shade_value">Grey level %1$d / 80</string>
+    <string name="notification_actions_title">Notification actions</string>
+    <string name="notification_actions_summary">Reply and delete or mark read from notifications. App-lock protection still applies.</string>
+    <string name="notification_read_title">Replace Delete with Mark as read</string>
+    <string name="notification_read_summary">Use Mark as read as the second notification action.</string>
+    <string name="mark_as_read">Mark as read</string>
+</resources>

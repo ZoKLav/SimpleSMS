@@ -17,5 +17,11 @@ public final class MessageTimes {
     public static String exact(long time, boolean use24Hour) {
         return exact(time, use24Hour, TimeZone.getDefault(), Locale.getDefault());
     }
+    public static String label(android.content.Context context,long time) {
+        return label(time,java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM),android.text.format.DateFormat.getTimeFormat(context));
+    }
+    static String label(long time,java.text.DateFormat calendar,java.text.DateFormat clock) {
+        if(time<=0)return "Unavailable";Date date=new Date(time);return calendar.format(date)+" · "+clock.format(date);
+    }
     public static long displayed(Message m) { return m.dateSent > 0 ? m.dateSent : m.date; }
 }

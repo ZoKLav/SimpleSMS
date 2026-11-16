@@ -16,11 +16,11 @@ import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.Switch;
+import androidx.appcompat.widget.SwitchCompat;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import android.support.v7.app.ActionBar;
+import androidx.appcompat.app.ActionBar;
 
 import com.android.messaging.R;
 import com.android.messaging.util.AppPrefs;
@@ -43,7 +43,7 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         ScrollView scroll = new ScrollView(this);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setBackgroundColor(AppPrefs.isDark(this) ? 0xff212121 : 0xfffafafa);
+        content.setBackgroundColor(AppPrefs.isDark(this) ? AppPrefs.darkSurface(this,0) : 0xfff3f6f7);
         scroll.addView(content, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(scroll);
         populate();
@@ -58,6 +58,7 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         content.removeAllViews();
         section("Appearance");
         row("Theme", themeLabel(), () -> chooseTheme());
+        row(getString(R.string.dark_shade_title),getString(R.string.dark_shade_value,AppPrefs.darkGrey(this)),this::chooseDarkGrey);
         colorRow("Accent color", AppPrefs.accent(this), "accent", true);
         colorRow("Outgoing message color", AppPrefs.outgoing(this), "outgoing", false);
         colorRow("Incoming message color", AppPrefs.incoming(this), "incoming", false);
@@ -66,14 +67,17 @@ public final class ApplicationSettingsActivity extends BaseActivity {
 
         section("Privacy & messaging");
         row("Notifications", "Android notification sound and lock-screen visibility", () -> startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()))));
+        row("Default notification sound",toneLabel(AppPrefs.defaultTone(this)),this::pickTone);
+        toggle("Vibrate","Vibrate for incoming messages",AppPrefs.vibrate(this),"vibrate",false);
         toggle("Show notification details", "Show sender and SMS text in Android notifications. With app lock on, previews require an unlocked app session.", AppPrefs.preview(this), "preview", false);
-        toggle("Notification reply and delete", "Reply from the shade with app lock off; unlock to reply with app lock on. Delete asks for confirmation.", AppPrefs.notificationActions(this), "notification_actions", false);
+        toggle(getString(R.string.notification_actions_title),getString(R.string.notification_actions_summary), AppPrefs.notificationActions(this), "notification_actions", false);
+        toggle(getString(R.string.notification_read_title),getString(R.string.notification_read_summary),AppPrefs.notificationMarkRead(this),"notification_mark_read",false);
         toggle("Hide MMS content", "Show Tap to display message until you open it. Also hides MMS text in lists and notifications.", AppPrefs.hideMms(this), "hide_mms", false);
         privateStorageToggle();
         row("Move existing SMS/MMS", "Encrypt existing shared messages, verify, then remove each original", () -> com.android.messaging.sms.ProviderMigration.confirm(this));
         boolean appLock=com.android.messaging.security.VaultKeys.lockEnabled(this);
         row("App lock", appLock ? "On — tap to turn off; private storage stays encrypted" : "Off — tap to require your device credential", () -> {
-            new AlertDialog.Builder(this).setTitle(appLock?"Turn off app lock?":"Enable app lock?")
+            new com.android.messaging.util.ScreenDialog.Builder(this).setTitle(appLock?"Turn off app lock?":"Enable app lock?")
                 .setMessage(appLock?"Private data stays encrypted, but SimpleSMS will be able to use its key without asking for your credential. Your device or system app lock can control access. Existing encrypted data will be converted in place; keep the app open until finished.":"Require your device credential when opening SimpleSMS. A secure screen lock and hardware-enforced authentication are required. Existing private data will be converted in place; keep the app open until finished.")
                 .setPositiveButton(appLock?"Turn off":"Enable",(d,w)->startActivity(new Intent(this,com.android.messaging.security.UnlockActivity.class).putExtra("lock_mode",appLock?"off":"on")))
                 .setNegativeButton("Cancel",null).show();
@@ -94,9 +98,9 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         toggle("Keyboard personalized learning", "Off by default for message and recipient fields", AppPrefs.keyboardLearning(this), "keyboard_learning", true);
 
         TextView note = new TextView(this);
-        note.setText("Optional private SMS/MMS storage and optional app lock. New traffic uses Android storage unless Private message storage is enabled. Keystore keys are generated on this device and are not embedded in the APK. No backups, accounts or analytics. Carrier SMS/MMS is not end-to-end encrypted. Existing shared SMS/MMS and earlier private messages stay visible in either mode. Turning private storage off does not export earlier private data. Shared originals stay in Android storage unless you explicitly move or delete them.");
+        note.setText(R.string.text_optional_private_sms_mms_storage_and_optional);
         note.setTextSize(13);
-        note.setTextColor(AppPrefs.isDark(this) ? 0xffbdbdbd : 0xff757575);
+        note.setTextColor(AppPrefs.isDark(this) ? 0xffd5dce2 : 0xff757575);
         note.setPadding(UiUtil.dp(this, 18), UiUtil.dp(this, 24), UiUtil.dp(this, 18), UiUtil.dp(this, 36));
         content.addView(note);
     }
@@ -104,21 +108,21 @@ public final class ApplicationSettingsActivity extends BaseActivity {
     private void privateStorageToggle(){
         boolean enabled=false;try{enabled=com.android.messaging.security.StorageMode.enabled(this);}catch(Exception ignored){}
         LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(UiUtil.dp(this,16),UiUtil.dp(this,12),UiUtil.dp(this,16),UiUtil.dp(this,16));
-        Switch sw=new Switch(this);sw.setText("Private message storage");sw.setTextSize(18);sw.setChecked(enabled);box.addView(sw);
-        TextView warning=new TextView(this);warning.setText("WARNING: Enabling this removes new incoming and outgoing SMS/MMS from Android's shared message store after the private encrypted copy is verified. These messages are then managed solely by SimpleSMS and will not be available to other SMS apps. Clearing app data, uninstalling, or losing the encryption key can permanently lose them. Existing history is not moved by this switch.");warning.setTextSize(16);warning.setTypeface(null,android.graphics.Typeface.BOLD);warning.setTextColor(0xffb71c1c);warning.setBackgroundColor(0xffffebee);warning.setPadding(UiUtil.dp(this,12),UiUtil.dp(this,12),UiUtil.dp(this,12),UiUtil.dp(this,12));box.addView(warning);content.addView(box);
+        SwitchCompat sw=new SwitchCompat(this);sw.setText(R.string.text_private_message_storage);sw.setTextSize(18);sw.setChecked(enabled);box.addView(sw);
+        TextView warning=new TextView(this);warning.setText(R.string.text_warning_enabling_this_removes_new_incoming_and);warning.setTextSize(16);warning.setTypeface(null,android.graphics.Typeface.BOLD);warning.setTextColor(0xffb71c1c);warning.setBackgroundColor(0xffffebee);warning.setPadding(UiUtil.dp(this,12),UiUtil.dp(this,12),UiUtil.dp(this,12),UiUtil.dp(this,12));box.addView(warning);content.addView(box);
         sw.setOnCheckedChangeListener((button,checked)->{
             Runnable save=()->{try{com.android.messaging.security.StorageMode.set(this,checked);populate();}catch(Exception failure){Toast.makeText(this,failure.getMessage(),Toast.LENGTH_LONG).show();populate();}};
-            if(checked){AlertDialog dialog=new AlertDialog.Builder(this).setTitle("WARNING: Delete shared copies of new messages?")
+            if(checked){AlertDialog dialog=new com.android.messaging.util.ScreenDialog.Builder(this).setTitle("WARNING: Delete shared copies of new messages?")
                 .setMessage("New incoming and outgoing SMS/MMS, including attachments, will be kept in SimpleSMS's private encrypted storage. Verified shared copies will be deleted from Android's message store. SimpleSMS will solely manage these messages. Other SMS apps will not see them, and clearing app data, uninstalling or losing the key can permanently lose them.\n\nThis does not move older history or encrypt carrier transport. Messages that cannot be verified or safely removed remain in shared storage.\n\nEnable only if you accept this change.")
                 .setPositiveButton("Enable private storage",(d,w)->save.run()).setNegativeButton("Cancel",(d,w)->populate()).setOnCancelListener(d->populate()).create();
-                dialog.setOnShowListener(d->{dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xffb71c1c);int titleId=getResources().getIdentifier("alertTitle","id","android");TextView title=dialog.findViewById(titleId);if(title!=null)title.setTextColor(0xffb71c1c);});dialog.show();
+                dialog.setOnShowListener(d->{dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xffb71c1c);});dialog.show();
             }else save.run();
         });
     }
 
     private void section(String title) {
         TextView v = new TextView(this);
-        v.setText(title.toUpperCase());
+        v.setText(title.toUpperCase(java.util.Locale.getDefault()));
         v.setTextColor(AppPrefs.accent(this));
         v.setTextSize(14);
         v.setPadding(UiUtil.dp(this, 16), UiUtil.dp(this, 24), UiUtil.dp(this, 16), UiUtil.dp(this, 8));
@@ -130,7 +134,7 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         TextView t = v.findViewById(R.id.title);
         TextView s = v.findViewById(R.id.summary);
         t.setText(title); s.setText(summary == null ? "" : summary);
-        if (AppPrefs.isDark(this)) { t.setTextColor(0xfff5f5f5); s.setTextColor(0xffbdbdbd); }
+        if (AppPrefs.isDark(this)) { t.setTextColor(0xffedf2f6); s.setTextColor(0xffd5dce2); }
         v.setOnClickListener(x -> click.run());
         content.addView(v);
     }
@@ -142,10 +146,10 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         row.setMinimumHeight(UiUtil.dp(this, 64));
         row.setPadding(UiUtil.dp(this, 16), UiUtil.dp(this, 7), UiUtil.dp(this, 12), UiUtil.dp(this, 7));
         LinearLayout labels = new LinearLayout(this); labels.setOrientation(LinearLayout.VERTICAL);
-        TextView t = new TextView(this); t.setText(title); t.setTextSize(16); t.setTextColor(AppPrefs.isDark(this) ? 0xfff5f5f5 : 0xde000000); labels.addView(t);
-        TextView s = new TextView(this); s.setText(summary); s.setTextSize(14); s.setTextColor(AppPrefs.isDark(this) ? 0xffbdbdbd : 0x8a000000); labels.addView(s);
+        TextView t = new TextView(this); t.setText(title); t.setTextSize(16); t.setTextColor(AppPrefs.isDark(this) ? 0xffedf2f6 : 0xde000000); labels.addView(t);
+        TextView s = new TextView(this); s.setText(summary); s.setTextSize(14); s.setTextColor(AppPrefs.isDark(this) ? 0xffd5dce2 : 0x8a000000); labels.addView(s);
         row.addView(labels, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        Switch sw = new Switch(this); sw.setChecked(value); sw.setOnCheckedChangeListener((button, checked) -> { AppPrefs.setBool(this, key, checked); if ("preview".equals(key) || "notification_actions".equals(key) || "hide_mms".equals(key)) NotificationHelper.clearMessages(this); if (recreate) recreate(); }); row.addView(sw);
+        SwitchCompat sw = new SwitchCompat(this); sw.setChecked(value); sw.setOnCheckedChangeListener((button, checked) -> { AppPrefs.setBool(this, key, checked); if ("preview".equals(key) || "notification_actions".equals(key) || "notification_mark_read".equals(key) || "hide_mms".equals(key)) NotificationHelper.clearMessages(this); if (recreate) recreate(); }); row.addView(sw);
         content.addView(row);
     }
 
@@ -154,16 +158,24 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         return "dark".equals(t) ? "Dark" : "light".equals(t) ? "Light" : "System";
     }
 
+    private void chooseDarkGrey(){
+        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);int pad=UiUtil.dp(this,20);box.setPadding(pad,pad,pad,pad);
+        TextView preview=new TextView(this);preview.setTextColor(Color.WHITE);preview.setPadding(pad,pad,pad,pad);box.addView(preview);
+        android.widget.SeekBar slider=new android.widget.SeekBar(this);slider.setMax(80);slider.setProgress(AppPrefs.darkGrey(this));box.addView(slider);
+        Runnable refresh=()->{int value=slider.getProgress();preview.setText(getString(R.string.dark_shade_value,value));preview.setBackgroundColor(AppPrefs.greyColor(value,0));};refresh.run();
+        slider.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(android.widget.SeekBar view,int value,boolean user){refresh.run();}public void onStartTrackingTouch(android.widget.SeekBar view){}public void onStopTrackingTouch(android.widget.SeekBar view){}});
+        new com.android.messaging.util.ScreenDialog.Builder(this).setTitle(R.string.dark_shade_title).setView(box).setPositiveButton(android.R.string.ok,(dialog,which)->{AppPrefs.setInt(this,"dark_grey",slider.getProgress());recreate();}).setNegativeButton(android.R.string.cancel,null).show();
+    }
     private void chooseTheme() {
         String[] labels = {"System", "Light", "Dark"}; String[] values = {"system", "light", "dark"};
-        new AlertDialog.Builder(this).setTitle("Theme").setItems(labels, (d, which) -> { AppPrefs.setString(this, "theme", values[which]); recreate(); }).show();
+        new com.android.messaging.util.ScreenDialog.Builder(this).setTitle("Theme").setItems(labels, (d, which) -> { AppPrefs.setString(this, "theme", values[which]); recreate(); }).show();
     }
 
     private void chooseScale() {
         final int[] values = {80, 90, 100, 110, 120, 130, 140, 150};
         String[] labels = new String[values.length];
         for (int i = 0; i < values.length; i++) labels[i] = values[i] + "%";
-        new AlertDialog.Builder(this).setTitle("UI scale (DPI)").setItems(labels, (d, which) -> {
+        new com.android.messaging.util.ScreenDialog.Builder(this).setTitle("UI scale (DPI)").setItems(labels, (d, which) -> {
             AppPrefs.setInt(this, "scale", values[which]); recreate();
         }).show();
     }
@@ -175,7 +187,7 @@ public final class ApplicationSettingsActivity extends BaseActivity {
     private void chooseColor(String title, int current, String key, boolean recreate) {
         String[] labels = {"AOSP blue", "Slate", "Indigo", "Teal", "Green", "Orange", "Red", "Purple", "Pink", "Dark grey", "White", "Custom hex…"};
         int[] colors = {0xff039be5,0xff607d8b,0xff3f51b5,0xff008577,0xff558b2f,0xffef6c00,0xffc62828,0xff7e57c2,0xffad1457,0xff424242,0xffffffff};
-        new AlertDialog.Builder(this).setTitle(title).setItems(labels, (d, which) -> {
+        new com.android.messaging.util.ScreenDialog.Builder(this).setTitle(title).setItems(labels, (d, which) -> {
             if (which < colors.length) {
                 AppPrefs.setInt(this, key, colors[which]);
                 if (recreate) recreate(); else populate();
@@ -186,7 +198,7 @@ public final class ApplicationSettingsActivity extends BaseActivity {
     private void customColor(String title, int current, String key, boolean recreate) {
         EditText input = new EditText(this);
         input.setSingleLine(true); input.setInputType(InputType.TYPE_CLASS_TEXT); input.setText(UiUtil.hex(current)); input.setSelection(input.length());
-        new AlertDialog.Builder(this).setTitle(title + " — hex").setView(input)
+        new com.android.messaging.util.ScreenDialog.Builder(this).setTitle(title + " — hex").setView(input)
                 .setPositiveButton("Set", (d, w) -> {
                     try {
                         int color = Color.parseColor(input.getText().toString().trim());
@@ -206,7 +218,7 @@ public final class ApplicationSettingsActivity extends BaseActivity {
     private void chooseAction(String key) {
         String[] labels = {"None", "Archive / unarchive", "Mark read", "Delete"};
         String[] values = {AppPrefs.NONE, AppPrefs.ARCHIVE, AppPrefs.READ, AppPrefs.DELETE};
-        new AlertDialog.Builder(this).setTitle("Swipe action").setItems(labels, (d, which) -> { AppPrefs.setString(this, key, values[which]); populate(); }).show();
+        new com.android.messaging.util.ScreenDialog.Builder(this).setTitle("Swipe action").setItems(labels, (d, which) -> { AppPrefs.setString(this, key, values[which]); populate(); }).show();
     }
 
     private void pickTone() {
@@ -215,7 +227,7 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         i.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true);
         i.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true);
         i.putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, AppPrefs.defaultTone(this));
-        startActivityForResult(i, PICK_TONE);
+        try{startActivityForResult(i,PICK_TONE);}catch(android.content.ActivityNotFoundException unavailable){Toast.makeText(this,"No sound picker available",Toast.LENGTH_LONG).show();}
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -223,7 +235,7 @@ public final class ApplicationSettingsActivity extends BaseActivity {
         if (requestCode != PICK_TONE || resultCode != RESULT_OK || data == null) return;
         Uri uri = data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);
         AppPrefs.setString(this, "tone_default", uri == null ? AppPrefs.SILENT : uri.toString());
-        NotificationHelper.clearChannels(this); populate();
+        populate();
     }
 
     private String toneLabel(Uri uri) {

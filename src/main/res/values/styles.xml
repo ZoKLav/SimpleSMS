@@ -10,8 +10,14 @@
     <style name="BugleTheme.ArchivedConversationListActivity" parent="BugleTheme.ConversationListActivity"><item name="colorPrimary">@color/archived_conversation_action_bar_background_color</item><item name="colorPrimaryDark">@color/archived_conversation_action_bar_background_color_dark</item></style>
     <style name="BugleTheme.ConversationActivity" parent="BugleTheme"><item name="android:windowBackground">@color/conversation_background</item></style>
     <style name="BugleTheme.SettingsActivity" parent="BugleTheme"/>
-    <style name="ConversationListItemViewTextStyle"><item name="android:includeFontPadding">true</item><item name="android:textSize">15sp</item><item name="android:textColor">@color/conversation_list_details</item></style>
+    <style name="ConversationListItemViewTextStyle"><item name="android:includeFontPadding">false</item><item name="android:textSize">15sp</item><item name="android:textColor">@color/conversation_list_details</item></style>
     <style name="ConversationListItemViewConversationNameStyle" parent="ConversationListItemViewTextStyle"><item name="android:textSize">17sp</item><item name="android:textColor">@color/conversation_list_name</item></style>
     <style name="ConversationComposeSendText"><item name="android:textSize">17sp</item><item name="android:gravity">center_vertical</item><item name="android:maxLines">4</item><item name="android:background">@null</item><item name="android:paddingLeft">8dp</item><item name="android:paddingRight">8dp</item></style>
-    <style name="BugleTheme.Dark" parent="Theme.AppCompat.NoActionBar"><item name="colorPrimary">@color/action_bar_background_color</item><item name="colorPrimaryDark">@color/action_bar_background_color_dark</item><item name="colorAccent">@color/action_bar_background_color</item><item name="actionBarStyle">@style/BugleActionBar</item><item name="android:windowBackground">#212121</item></style>
+    <style name="BugleTheme.Dark" parent="Theme.AppCompat.NoActionBar"><item name="colorPrimary">@color/action_bar_background_color</item><item name="colorPrimaryDark">@color/action_bar_background_color_dark</item><item name="colorAccent">@color/action_bar_background_color</item><item name="actionBarStyle">@style/BugleActionBar</item><item name="android:windowBackground">#111820</item></style>
+    <style name="NotificationActionTheme" parent="android:style/Theme.Material.Light.Dialog.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item><item name="android:windowBackground">@android:color/transparent</item><item name="android:backgroundDimAmount">0.0</item><item name="android:windowNoTitle">true</item><item name="android:windowDisablePreview">true</item>
+    </style>
+    <style name="NotificationActionTheme.Dark" parent="android:style/Theme.Material.Dialog.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item><item name="android:windowBackground">@android:color/transparent</item><item name="android:backgroundDimAmount">0.0</item><item name="android:windowNoTitle">true</item><item name="android:windowDisablePreview">true</item>
+    </style>
 </resources>

@@ -11,14 +11,16 @@ import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.view.ContextThemeWrapper;
-import android.support.v7.widget.Toolbar;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.view.ContextThemeWrapper;
+import androidx.appcompat.widget.Toolbar;
 import com.android.messaging.R;
 
 /** One measured column owns the toolbar, screen content, and system insets. */
 public abstract class BaseActivity extends AppCompatActivity {
     private FrameLayout screen;
+    private String palette;
+    private String palette(){return AppPrefs.isDark(this)+":"+AppPrefs.darkGrey(this);}
 
     @Override protected void attachBaseContext(Context base) {
         int scale = AppPrefs.scale(base);
@@ -31,6 +33,7 @@ public abstract class BaseActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle state) {
         setTheme(AppPrefs.isDark(this) ? R.style.BugleTheme_Dark : R.style.BugleTheme);
         super.onCreate(state);
+        palette=palette();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         if (Build.VERSION.SDK_INT >= 30) {
@@ -41,7 +44,7 @@ public abstract class BaseActivity extends AppCompatActivity {
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(AppPrefs.isDark(this) ? 0xff181b20 : 0xfff7f8fa);
+        shell.setBackgroundColor(AppPrefs.isDark(this) ? AppPrefs.darkSurface(this,0) : 0xfff3f6f7);
         Toolbar toolbar = new Toolbar(new ContextThemeWrapper(this, R.style.SimpleSMSToolbarTheme));
         toolbar.setPopupTheme(AppPrefs.isDark(this)
                 ? R.style.SimpleSMSPopupThemeDark : R.style.SimpleSMSPopupThemeLight);
@@ -53,6 +56,7 @@ public abstract class BaseActivity extends AppCompatActivity {
         screen = new FrameLayout(this);
         shell.addView(screen, new LinearLayout.LayoutParams(-1, 0, 1));
         super.setContentView(shell);
+        getWindow().setBackgroundDrawable(null);
         setSupportActionBar(toolbar);
         // On older Android the window already resizes for system bars and the IME.
         // On API 30+ consume insets once, outside BOTH toolbar and screen content.
@@ -80,8 +84,9 @@ public abstract class BaseActivity extends AppCompatActivity {
         if(!com.android.messaging.security.Vault.unlocked() || (com.android.messaging.security.VaultKeys.lockEnabled(this)&&km!=null&&km.isDeviceLocked())){
             com.android.messaging.security.Vault.lock();
             startActivity(new android.content.Intent(this,com.android.messaging.security.UnlockActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK|android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK));
-            finish();
+            finish();return;
         }
+        if(!palette().equals(palette)){recreate();}
     }
     @Override public void setContentView(int resource) {
         screen.removeAllViews();

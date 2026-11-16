@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-feature android:name="android.hardware.telephony" android:required="true"/>
+    <uses-feature android:name="android.hardware.telephony" android:required="false"/>
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
     <uses-permission android:name="android.permission.READ_SMS"/>
     <uses-permission android:name="android.permission.RECEIVE_MMS"/>
@@ -8,12 +8,14 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS"/>
     <uses-permission android:name="android.permission.SEND_SMS"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
     <queries><intent><action android:name="android.provider.Telephony.SMS_DELIVER"/></intent></queries>
     <application android:name=".security.PrivateApplication" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false"
-        android:label="SimpleSMS" android:icon="@drawable/ic_launcher" android:theme="@style/BugleTheme.ConversationListActivity">
+        android:label="@string/app_name" android:supportsRtl="true" android:icon="@drawable/ic_launcher" android:theme="@style/BugleTheme.ConversationListActivity">
         <provider android:name=".security.TransferProvider" android:authorities="${applicationId}.private" android:exported="false" android:grantUriPermissions="true"/>
         <activity android:name=".ui.conversation.MmsViewerActivity" android:exported="false"/>
-        <activity android:name=".util.NotificationActionActivity" android:exported="false" android:excludeFromRecents="true"/>
+        <activity android:name=".util.NotificationActionActivity" android:exported="false" android:excludeFromRecents="true" android:taskAffinity="" android:theme="@style/NotificationActionTheme"/>
+        <receiver android:name=".util.NotificationCommandReceiver" android:exported="false"/>
         <receiver android:name=".util.NotificationReplyReceiver" android:exported="false"/>
         <receiver android:name=".sms.MmsResultReceiver" android:exported="false"/>
         <activity android:name=".security.UnlockActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/><category android:name="android.intent.category.APP_MESSAGING"/></intent-filter></activity>

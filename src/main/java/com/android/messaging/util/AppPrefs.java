@@ -20,10 +20,14 @@ public final class AppPrefs {
     public static void setString(Context c,String k,String v){p(c).edit().putString(k,v).apply();}
     public static void setBool(Context c,String k,boolean v){p(c).edit().putBoolean(k,v).apply();}
     private static String key(String a){String v=a==null?"unknown":a.trim().toLowerCase(Locale.US);String n=PhoneNumberUtils.normalizeNumber(v);if(n!=null&&!n.isEmpty())v=n;return Integer.toHexString(v.hashCode());}
-    public static int accent(Context c){return p(c).getInt("accent",0xff039be5);}
-    public static int incoming(Context c){return p(c).getInt("incoming",isDark(c)?0xff424242:0xffffffff);}
+    public static int accent(Context c){return p(c).getInt("accent",0xff176b75);}
+    public static int incoming(Context c){return p(c).getInt("incoming",isDark(c)?darkSurface(c,16):0xffffffff);}
     public static int outgoing(Context c){return p(c).getInt("outgoing",accent(c));}
-    public static int background(Context c){return p(c).getInt("background",isDark(c)?0xff212121:0xffeeeeee);}
+    public static int background(Context c){return p(c).getInt("background",isDark(c)?darkSurface(c,0):0xfff3f6f7);}
+    public static int darkGrey(Context c){return Math.max(0,Math.min(80,p(c).getInt("dark_grey",24)));}
+    public static int darkSurface(Context c,int offset){return greyColor(darkGrey(c),offset);}
+    public static int greyColor(int value,int offset){int n=Math.max(0,Math.min(112,value+offset));return Color.rgb(n,n,n);}
+    public static boolean notificationMarkRead(Context c){return p(c).getBoolean("notification_mark_read",false);}
     public static int scale(Context c){return p(c).getInt("scale",100);}
     public static String theme(Context c){return p(c).getString("theme","system");}
     public static String swipeLeft(Context c){return p(c).getString("swipe_left",ARCHIVE);}

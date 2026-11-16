@@ -1,11 +1,10 @@
 <com.android.messaging.ui.conversationlist.ConversationListItemView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content">
     <LinearLayout android:id="@+id/crossSwipeBackground" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:background="@drawable/swipe_shadow" android:visibility="gone" android:padding="@dimen/conversation_list_item_view_padding">
-        <ImageView android:id="@+id/crossSwipeArchiveIconLeft" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_archive_small_dark" android:visibility="gone"/>
+        <ImageView android:id="@+id/crossSwipeArchiveIconLeft" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_archive_small_dark" android:contentDescription="@null" android:importantForAccessibility="no" android:visibility="gone"/>
         <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
-        <ImageView android:id="@+id/crossSwipeArchiveIconRight" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_archive_small_dark" android:visibility="gone"/>
+        <ImageView android:id="@+id/crossSwipeArchiveIconRight" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_archive_small_dark" android:contentDescription="@null" android:importantForAccessibility="no" android:visibility="gone"/>
     </LinearLayout>
-    <FrameLayout android:id="@+id/swipeableContainer" android:layout_width="match_parent" android:layout_height="wrap_content">
-        <LinearLayout android:id="@+id/swipeableContent" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="112dp" android:gravity="center_vertical" android:background="?android:attr/selectableItemBackground" android:paddingStart="20dp" android:paddingEnd="20dp" android:paddingTop="20dp" android:paddingBottom="20dp">
+        <LinearLayout android:id="@+id/swipeableContainer" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="96dp" android:gravity="center_vertical" android:background="?android:attr/selectableItemBackground" android:paddingStart="20dp" android:paddingEnd="20dp" android:paddingTop="16dp" android:paddingBottom="16dp">
             <com.android.messaging.ui.ContactIconView android:id="@+id/conversation_icon" android:layout_width="@dimen/conversation_list_contact_icon_size" android:layout_height="@dimen/conversation_list_contact_icon_size"/>
             <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="16dp">
                 <TextView android:id="@+id/conversation_name" style="@style/ConversationListItemViewConversationNameStyle" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end"/>
@@ -15,5 +14,4 @@
             </LinearLayout>
             <TextView android:id="@+id/unread_badge" android:layout_width="wrap_content" android:minWidth="28dp" android:minHeight="28dp" android:padding="6dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:gravity="center" android:textColor="#FFFFFFFF" android:textSize="11sp" android:visibility="gone"/>
         </LinearLayout>
-    </FrameLayout>
 </com.android.messaging.ui.conversationlist.ConversationListItemView>

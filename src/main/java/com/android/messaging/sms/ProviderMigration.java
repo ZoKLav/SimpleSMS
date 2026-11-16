@@ -18,23 +18,25 @@ public final class ProviderMigration {
  public static boolean isMoving(){return moving.get();}
  private interface Progress { void update(String phase,int completed,int total,int moved,int kept); }
  public static void confirm(Activity a){
-  if(isMoving()){new AlertDialog.Builder(a).setMessage("A message move is already running.").setPositiveButton("OK",null).show();return;}
-  new AlertDialog.Builder(a).setTitle("Move shared messages into SimpleSMS?").setMessage("Copies existing SMS/MMS into encrypted private storage, verifies each copy, then removes that original from Android's shared database. Other messaging apps will no longer see moved messages. Locked originals and active sends are skipped. There is no backup or undo. Stop finishes the current message safely. If app lock expires, unlock and run the move again to continue.").setPositiveButton("Move messages",(d,w)->{
+  if(isMoving()){new com.android.messaging.util.ScreenDialog.Builder(a).setMessage("A message move is already running.").setPositiveButton("OK",null).show();return;}
+  new com.android.messaging.util.ScreenDialog.Builder(a).setTitle("Move shared messages into SimpleSMS?").setMessage("Copies existing SMS/MMS into encrypted private storage, verifies each copy, then removes that original from Android's shared database. Other messaging apps will no longer see moved messages. Locked originals and active sends are skipped. There is no backup or undo. Stop finishes the current message safely. If app lock expires, unlock and run the move again to continue.").setPositiveButton("Move messages",(d,w)->{
    if(!moving.compareAndSet(false,true))return;
-   java.util.concurrent.atomic.AtomicBoolean stop=new java.util.concurrent.atomic.AtomicBoolean();
-   ProgressDialog progress=new ProgressDialog(a);progress.setTitle("Moving messages");progress.setMessage("Preparing encrypted history…");progress.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);progress.setIndeterminate(true);progress.setCancelable(false);
-   progress.setButton(AlertDialog.BUTTON_NEGATIVE,"Stop",(dialog,which)->{});progress.show();
-   progress.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(v->{stop.set(true);progress.setMessage("Stopping after the current message…");progress.getButton(AlertDialog.BUTTON_NEGATIVE).setEnabled(false);});
-   android.os.Handler handler=new android.os.Handler(android.os.Looper.getMainLooper());
-   Object progressToken=new Object();
-   Progress report=(phase,completed,total,moved,kept)->{
-    handler.removeCallbacksAndMessages(progressToken);
-    handler.postAtTime(()->{if(a.isFinishing()||a.isDestroyed()||stop.get())return;progress.setIndeterminate(false);progress.setMax(Math.max(1,total));progress.setProgress(completed);progress.setMessage(phase+": "+completed+" / "+total+" checked · "+moved+" moved · "+kept+" kept");},progressToken,android.os.SystemClock.uptimeMillis());
-   };
-   new Thread(()->{String text;Context app=a.getApplicationContext();try{text=move(app,stop,report);}catch(Exception e){text="Move stopped: "+e.getMessage()+". Originals not yet verified remain in shared storage. Unlock and run the move again to continue.";}finally{moving.set(false);handler.removeCallbacksAndMessages(progressToken);app.getContentResolver().notifyChange(Vault.changes(app),null);}
-    String result=text;a.runOnUiThread(()->{if(a.isFinishing()||a.isDestroyed())return;progress.dismiss();new AlertDialog.Builder(a).setTitle("Message move").setMessage(result).setPositiveButton("OK",null).show();});
-   },"private-message-move").start();
+   startMove(a);
   }).setNegativeButton("Cancel",null).show();
+ }
+ private static void startMove(Activity activity){
+  ProgressDialog dialog=new ProgressDialog(activity);dialog.setTitle("Moving messages");dialog.setMessage("Preparing encrypted history…");dialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);dialog.setIndeterminate(true);dialog.setCancelable(false);ProgressUi ui=new ProgressUi(activity,dialog);
+  dialog.setButton(AlertDialog.BUTTON_NEGATIVE,"Stop",(d,w)->{});dialog.show();dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(view->{ui.stop.set(true);ProgressDialog progress=ui.dialog.get();if(progress!=null){progress.setMessage("Stopping after the current message…");progress.getButton(AlertDialog.BUTTON_NEGATIVE).setEnabled(false);}});
+  Context app=activity.getApplicationContext();new Thread(()->{String text;try{text=move(app,ui.stop,ui::update);}catch(Exception failure){text="Move stopped: "+failure.getMessage()+". Originals not yet verified remain in shared storage. Unlock and run the move again to continue.";}finally{moving.set(false);ui.handler.removeCallbacksAndMessages(ui.token);app.getContentResolver().notifyChange(Vault.changes(app),null);}String result=text;ui.handler.post(()->ui.finish(result));},"private-message-move").start();
+ }
+ private static final class ProgressUi implements Application.ActivityLifecycleCallbacks{
+  final Application application;final java.lang.ref.WeakReference<Activity> owner;final java.lang.ref.WeakReference<ProgressDialog> dialog;final java.util.concurrent.atomic.AtomicBoolean stop=new java.util.concurrent.atomic.AtomicBoolean();final android.os.Handler handler=new android.os.Handler(android.os.Looper.getMainLooper());final Object token=new Object();
+  ProgressUi(Activity activity,ProgressDialog progress){application=activity.getApplication();owner=new java.lang.ref.WeakReference<>(activity);dialog=new java.lang.ref.WeakReference<>(progress);application.registerActivityLifecycleCallbacks(this);}
+  void update(String phase,int completed,int total,int moved,int kept){handler.removeCallbacksAndMessages(token);handler.postAtTime(()->{Activity activity=owner.get();ProgressDialog progress=dialog.get();if(activity==null||activity.isFinishing()||activity.isDestroyed()||progress==null||stop.get())return;progress.setIndeterminate(false);progress.setMax(Math.max(1,total));progress.setProgress(completed);progress.setMessage(phase+": "+completed+" / "+total+" checked · "+moved+" moved · "+kept+" kept");},token,android.os.SystemClock.uptimeMillis());}
+  void detach(){handler.removeCallbacksAndMessages(token);ProgressDialog progress=dialog.get();if(progress!=null&&progress.isShowing())progress.dismiss();application.unregisterActivityLifecycleCallbacks(this);dialog.clear();owner.clear();}
+  void finish(String result){Activity activity=owner.get();detach();if(activity!=null&&!activity.isFinishing()&&!activity.isDestroyed())new com.android.messaging.util.ScreenDialog.Builder(activity).setTitle("Message move").setMessage(result).setPositiveButton("OK",null).show();}
+  public void onActivityDestroyed(Activity activity){if(owner.get()==activity){stop.set(true);detach();}}
+  public void onActivityCreated(Activity a,android.os.Bundle b){}public void onActivityStarted(Activity a){}public void onActivityResumed(Activity a){}public void onActivityPaused(Activity a){}public void onActivityStopped(Activity a){}public void onActivitySaveInstanceState(Activity a,android.os.Bundle b){}
  }
  private static String move(Context c,java.util.concurrent.atomic.AtomicBoolean stop,Progress report)throws Exception{
   Vault.require();if(!SmsRole.isDefault(c))throw new SecurityException("Set SimpleSMS as the default SMS app first");int moved=0,kept=0;Map<String,Long> prior=privateSources(c);

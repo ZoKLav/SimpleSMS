@@ -32,9 +32,9 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import android.support.v7.app.ActionBar;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
+import androidx.appcompat.app.ActionBar;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.messaging.R;
 import com.android.messaging.sms.SmsRepository;
@@ -62,6 +62,10 @@ public final class ConversationActivity extends BaseActivity implements Conversa
     private static final int MENU_OPTIONS = 1;
     private static final int MENU_ARCHIVE = 2;
     private static final int MENU_DELETE = 3;
+    private static final int MENU_CONTACT=4;
+    private final Handler draftHandler=new Handler(Looper.getMainLooper());
+    private final Runnable persistDraft=this::persistDraft;
+    private boolean updatingRead;
 
     private long threadId = -1L;
     private String address;
@@ -88,6 +92,7 @@ public final class ConversationActivity extends BaseActivity implements Conversa
         configureComposer();
         configureMessages();
         restoreDraft();
+        createLoader();
         registerObserver();
     }
 
@@ -96,10 +101,11 @@ public final class ConversationActivity extends BaseActivity implements Conversa
         super.onNewIntent(intent);
         loader.invalidate();
         setIntent(intent);
-        saveDraft();attachment=null;updateAttachment();
+        flushDraft();attachment=null;updateAttachment();
         parseIntent(intent);
         configureActionBar();
         configureRecipient();
+        if(adapter!=null)adapter.close();
         adapter = new ConversationMessageAdapter(address, this);
         messageList.setAdapter(adapter);
         restoreDraft();
@@ -107,30 +113,18 @@ public final class ConversationActivity extends BaseActivity implements Conversa
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
-        loader.resume();
-        if(!com.android.messaging.security.Vault.unlocked())return;
-        observeShared();
-        if (threadId >= 0 && com.android.messaging.security.Vault.unlocked()) {
-            new Thread(() -> {
-                try { SmsRepository.markRead(this, threadId); } catch (Exception ignored) { }
-            }, "sms-mark-read").start();
-            NotificationHelper.cancel(this, threadId);
-            loadMessages();
-        }
-    }
+    protected void onResume(){super.onResume();requestedThread.set(threadId);if(!com.android.messaging.security.Vault.unlocked()||isFinishing())return;observeShared();loader.resume();}
 
     @Override
     protected void onPause() {
         loader.pause();
-        saveDraft();
+        flushDraft();
         super.onPause();
     }
 
     @Override
     protected void onDestroy() {
-        loader.pause();
+        if(loader!=null)loader.close();if(adapter!=null)adapter.close();messageList.setAdapter(null);draftHandler.removeCallbacks(persistDraft);
         if (observer != null) {
             try { getContentResolver().unregisterContentObserver(observer); } catch (Exception ignored) { }
         }
@@ -171,12 +165,10 @@ public final class ConversationActivity extends BaseActivity implements Conversa
     private void configureDarkUi() {
         boolean dark = AppPrefs.isDark(this);
         int surface = AppPrefs.background(this);
-        int panel = dark ? 0xff2b2b2b : 0xffffffff;
+        int panel = dark ? AppPrefs.darkSurface(this,8) : 0xffffffff;
         int primary = dark ? 0xfff5f5f5 : 0xde000000;
-        int secondary = dark ? 0xffbdbdbd : 0x8a000000;
+        int secondary = dark ? 0xffd5dce2 : 0x8a000000;
 
-        View root = findViewById(R.id.conversation_root);
-        if (root != null) root.setBackgroundColor(surface);
         messageList.setBackgroundColor(surface);
 
         recipientContainer.setBackgroundColor(panel);
@@ -189,7 +181,7 @@ public final class ConversationActivity extends BaseActivity implements Conversa
         ComposeMessageView composeView = findViewById(R.id.message_compose_view);
         composeView.setBackgroundColor(panel);
         android.graphics.drawable.GradientDrawable field = new android.graphics.drawable.GradientDrawable();
-        field.setColor(dark ? 0xff383c43 : 0xfff0f2f5);
+        field.setColor(dark ? AppPrefs.darkSurface(this,16) : 0xffe9eff1);
         field.setCornerRadius(com.android.messaging.util.UiUtil.dp(this, 24));
         compose.setBackground(field);
         compose.setTextColor(primary);
@@ -233,7 +225,7 @@ public final class ConversationActivity extends BaseActivity implements Conversa
             compose.setImeOptions(compose.getImeOptions() | EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
             compose.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         }
-        send.setColorFilter(AppPrefs.conversationColor(this, address));
+        int sendColor=AppPrefs.conversationColor(this,address);send.setBackground(com.android.messaging.util.UiUtil.rounded(this,sendColor,18));send.setColorFilter(com.android.messaging.util.UiUtil.readable(sendColor));attach.setBackgroundResource(android.R.drawable.list_selector_background);attach.setTextColor(AppPrefs.isDark(this)?0xffb6dfe3:AppPrefs.accent(this));attach.setTextSize(28);
         send.setOnClickListener(v -> sendMessage());
         compose.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
@@ -250,6 +242,7 @@ public final class ConversationActivity extends BaseActivity implements Conversa
         LinearLayoutManager manager = new LinearLayoutManager(this);
         manager.setStackFromEnd(true);
         messageList.setLayoutManager(manager);
+        if(adapter!=null)adapter.close();
         adapter = new ConversationMessageAdapter(address, this);
         messageList.setAdapter(adapter);
     }
@@ -303,36 +296,17 @@ public final class ConversationActivity extends BaseActivity implements Conversa
         final String oldDraftKey = AppPrefs.draftKey(threadId, address);
         send.setEnabled(false);
         compose.setEnabled(false);attach.setEnabled(false);
-        new Thread(() -> {
-            try {
-                long id=media!=null||dest.contains(",")||dest.contains(";")?com.android.messaging.sms.MmsTransport.send(this,dest,body,media):SmsSender.send(this,dest,body);
-                runOnUiThread(() -> {
-                    threadId = id;
-                    address = dest;
-                    recipientContainer.setVisibility(View.GONE);
-                    restoringDraft = true;
-                    attachment=null;updateAttachment();
-                    compose.setText("");
-                    restoringDraft = false;
-                    AppPrefs.p(this).edit().remove(oldDraftKey).apply();
-                    if(notificationDraftId>0)try{com.android.messaging.security.Vault.erase(this,notificationDraftId);notificationDraftId=0;}catch(Exception ignored){}
-                    compose.setEnabled(true);attach.setEnabled(true);
-                    send.setEnabled(false);
-                    adapter = new ConversationMessageAdapter(address, this);
-                    messageList.setAdapter(adapter);
-                    configureActionBar();
-                    if (AppPrefs.sendSound(this)) playSendSound();
-                    loadMessages();
-                    invalidateOptionsMenu();
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    compose.setEnabled(true);attach.setEnabled(true);
-                    send.setEnabled(true);
-                    Toast.makeText(this, "Send failed: "+e.getMessage(), Toast.LENGTH_LONG).show();
-                });
-            }
-        }, "sms-send").start();
+        final android.content.Context app=getApplicationContext();
+        com.android.messaging.util.UiWork.run(this,()->media!=null||dest.contains(",")||dest.contains(";")?com.android.messaging.sms.MmsTransport.send(app,dest,body,media):SmsSender.send(app,dest,body),(activity,id,error)->{
+            if(error!=null){activity.compose.setEnabled(true);activity.attach.setEnabled(true);activity.send.setEnabled(true);Toast.makeText(activity,"Send failed: "+error.getMessage(),Toast.LENGTH_LONG).show();}else activity.messageSent(id,dest,oldDraftKey);
+        });
+    }
+    private void messageSent(long id,String dest,String oldDraftKey){
+        loader.invalidate();threadId=id;address=dest;recipientContainer.setVisibility(View.GONE);restoringDraft=true;attachment=null;updateAttachment();compose.setText("");restoringDraft=false;draftHandler.removeCallbacks(persistDraft);
+        final android.content.Context app=getApplicationContext();final android.content.SharedPreferences preferences=AppPrefs.p(this);com.android.messaging.util.SessionDrafts.remember(app,preferences,oldDraftKey,"");
+        com.android.messaging.util.Workers.IO.execute(()->{try{if(com.android.messaging.security.Vault.unlocked()&&AppPrefs.p(app)==preferences){preferences.edit().remove(oldDraftKey).apply();com.android.messaging.util.SessionDrafts.persisted(oldDraftKey,"");}}catch(IllegalStateException locked){}});
+        if(notificationDraftId>0)try{com.android.messaging.security.Vault.erase(this,notificationDraftId);notificationDraftId=0;}catch(Exception ignored){}
+        compose.setEnabled(true);attach.setEnabled(true);send.setEnabled(false);adapter.setAddress(address);configureActionBar();int color=AppPrefs.conversationColor(this,address);send.setBackground(com.android.messaging.util.UiUtil.rounded(this,color,18));send.setColorFilter(com.android.messaging.util.UiUtil.readable(color));if(AppPrefs.sendSound(this))playSendSound();loadMessages();invalidateOptionsMenu();
     }
 
     private void playSendSound() {
@@ -343,42 +317,45 @@ public final class ConversationActivity extends BaseActivity implements Conversa
         } catch (Exception ignored) { }
     }
 
-    private final com.android.messaging.util.MessageLoader<List<SmsRepository.Message>> loader =
-        new com.android.messaging.util.MessageLoader<>(() -> threadId < 0 ? null : SmsRepository.messages(this, threadId), (out, failure) -> {
-            if (failure != null) { Toast.makeText(this, "Could not read messages: " + failure.getMessage(), Toast.LENGTH_LONG).show(); return; }
-            if (out == null) return;
-            adapter.setItems(out);
-            if (adapter.getItemCount() > 0) messageList.scrollToPosition(adapter.getItemCount() - 1);
-        });
-    private void loadMessages() { loader.request(); }
+    private com.android.messaging.util.MessageLoader<List<SmsRepository.Message>> loader;
+    private final java.util.concurrent.atomic.AtomicLong requestedThread=new java.util.concurrent.atomic.AtomicLong(-1);
+    private void createLoader(){final android.content.Context app=getApplicationContext();final java.util.concurrent.atomic.AtomicLong requested=requestedThread;loader=new com.android.messaging.util.MessageLoader<>(()->{long id=requested.get();return id<0?null:SmsRepository.messages(app,id);},this::messagesLoaded);}
+    private void messagesLoaded(List<SmsRepository.Message> out,Exception failure){
+        if(failure!=null){Toast.makeText(this,"Could not read messages: "+failure.getMessage(),Toast.LENGTH_LONG).show();return;}if(out==null)return;
+        int previous=adapter.getItemCount();LinearLayoutManager layout=(LinearLayoutManager)messageList.getLayoutManager();boolean atBottom=previous==0||layout.findLastVisibleItemPosition()>=previous-2;
+        adapter.setItems(out,com.android.messaging.util.UiUtil.appearance(this)+":"+ContactResolver.name(this,address),()->{if(atBottom&&adapter.getItemCount()>0)messageList.scrollToPosition(adapter.getItemCount()-1);});configureActionBar();
+        if(!updatingRead){updatingRead=true;final android.content.Context app=getApplicationContext();com.android.messaging.util.UiWork.run(this,()->{NotificationHelper.dismissLoaded(app,out);boolean defaultApp=SmsRole.isDefault(app);for(SmsRepository.Message m:out)if(m.read==0&&(!m.shared||defaultApp)){SmsRepository.markRead(app,out);return true;}return false;},(activity,changed,error)->{activity.updatingRead=false;if(Boolean.TRUE.equals(changed))activity.loadMessages();});}
+    }
+    private void loadMessages(){requestedThread.set(threadId);loader.request();}
 
     @Override
     public void menu(SmsRepository.Message message) {
         java.util.ArrayList<String> actions=new java.util.ArrayList<>();actions.add("Copy text");actions.add(message.locked?"Unlock message":"Lock message");actions.add("Delete message");if(message.pending)actions.add("Download MMS");for(SmsRepository.Part part:message.parts)actions.add("Open externally: "+part.mime);
-        new AlertDialog.Builder(this).setItems(actions.toArray(new String[0]),(d,w)->{
+        new com.android.messaging.util.ScreenDialog.Builder(this).setItems(actions.toArray(new String[0]),(d,w)->{
             if(w==0){ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("Message",message.body));}
-            else if(w==1)operation(()->SmsRepository.setLocked(this,message,!message.locked));
-            else if(w==2)new AlertDialog.Builder(this).setTitle("Delete message?").setMessage("Locked messages must be unlocked first.").setPositiveButton("Delete",(dd,ww)->operation(()->SmsRepository.deleteMessage(this,message.id))).setNegativeButton("Cancel",null).show();
-            else if(message.pending&&w==3)operation(()->com.android.messaging.sms.MmsTransport.download(this,message));
-            else {SmsRepository.Part part=message.parts.get(w-3-(message.pending?1:0));new AlertDialog.Builder(this).setTitle("Open attachment?").setMessage("The selected viewer receives decrypted media and may keep its own copy.").setPositiveButton("Open",(dd,ww)->{try{byte[] bytes=com.android.messaging.sms.SharedMessages.attachment(this,part);Uri uri=com.android.messaging.security.TransferProvider.outgoing(this,bytes,part.mime);startActivity(new Intent(Intent.ACTION_VIEW).setDataAndType(uri,part.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));}catch(Exception e){Toast.makeText(this,"No compatible media viewer",Toast.LENGTH_LONG).show();}}).setNegativeButton("Cancel",null).show();}
+            else if(w==1)operation(app->SmsRepository.setLocked(app,message,!message.locked));
+            else if(w==2)new com.android.messaging.util.ScreenDialog.Builder(this).setTitle("Delete message?").setMessage("Locked messages must be unlocked first.").setPositiveButton("Delete",(dd,ww)->operation(app->SmsRepository.deleteMessage(app,message.id))).setNegativeButton("Cancel",null).show();
+            else if(message.pending&&w==3)operation(app->com.android.messaging.sms.MmsTransport.download(app,message));
+            else {SmsRepository.Part part=message.parts.get(w-3-(message.pending?1:0));new com.android.messaging.util.ScreenDialog.Builder(this).setTitle("Open attachment?").setMessage("The selected viewer receives decrypted media and may keep its own copy.").setPositiveButton("Open",(dd,ww)->{try{byte[] bytes=com.android.messaging.sms.SharedMessages.attachment(this,part);Uri uri=com.android.messaging.security.TransferProvider.outgoing(this,bytes,part.mime);startActivity(new Intent(Intent.ACTION_VIEW).setDataAndType(uri,part.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));}catch(Exception e){Toast.makeText(this,"No compatible media viewer",Toast.LENGTH_LONG).show();}}).setNegativeButton("Cancel",null).show();}
         }).show();
     }
     @Override public void display(SmsRepository.Message message) {
         if(message.pending) {
-            new AlertDialog.Builder(this).setTitle("Download MMS?")
+            new com.android.messaging.util.ScreenDialog.Builder(this).setTitle("Download MMS?")
                 .setMessage("Download this message from your carrier. Tap the downloaded message to display it.")
-                .setPositiveButton("Download",(d,w)->operation(()->com.android.messaging.sms.MmsTransport.download(this,message)))
+                .setPositiveButton("Download",(d,w)->operation(app->com.android.messaging.sms.MmsTransport.download(app,message)))
                 .setNegativeButton("Cancel",null).show();
         } else startActivity(new Intent(this,MmsViewerActivity.class).putExtra("message_id",message.id));
     }
-    private interface Work{void run()throws Exception;}
-    private void operation(Work work){new Thread(()->{try{work.run();runOnUiThread(this::loadMessages);}catch(Exception e){runOnUiThread(()->Toast.makeText(this,"Operation failed: "+e.getMessage(),Toast.LENGTH_LONG).show());}},"private-message-action").start();}
-    private void updateAttachment(){attach.setText(attachment==null?"+":"×");compose.setHint(attachment==null?"Text message":"MMS attachment selected");send.setEnabled(attachment!=null||compose.length()>0);}
+    private interface Work{void run(android.content.Context app)throws Exception;}
+    private void operation(Work work){final android.content.Context app=getApplicationContext();com.android.messaging.util.UiWork.run(this,()->{work.run(app);return true;},(activity,value,error)->{if(error==null)activity.loadMessages();else Toast.makeText(activity,"Operation failed: "+error.getMessage(),Toast.LENGTH_LONG).show();});}
+    private void updateAttachment(){attach.setText(attachment==null?R.string.text_symbol_12:R.string.text_symbol_13);compose.setHint(attachment==null?"Text message":"MMS attachment selected");send.setEnabled(attachment!=null||compose.length()>0);}
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         if (address != null && !address.trim().isEmpty()) {
             menu.add(0, MENU_OPTIONS, 0, "People & options");
+            if(ContactResolver.singleNumber(address))menu.add(0,MENU_CONTACT,3,"Add to contacts");
             menu.add(0, MENU_ARCHIVE, 1, AppPrefs.isArchived(this, threadId) ? "Unarchive" : "Archive");
             if (threadId >= 0) menu.add(0, MENU_DELETE, 2, "Delete conversation");
         }
@@ -388,10 +365,10 @@ public final class ConversationActivity extends BaseActivity implements Conversa
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == android.R.id.home) { finish(); return true; }
+        if(item.getItemId()==MENU_CONTACT){ContactResolver.addToContacts(this,address);return true;}
         if (item.getItemId() == MENU_OPTIONS) {
             startActivity(new Intent(this, PeopleAndOptionsActivity.class)
-                    .putExtra(PeopleAndOptionsActivity.EXTRA_THREAD_ID, threadId)
-                    );
+                    .putExtra(PeopleAndOptionsActivity.EXTRA_THREAD_ID, threadId).putExtra(PeopleAndOptionsActivity.EXTRA_ADDRESS,address));
             return true;
         }
         if (item.getItemId() == MENU_ARCHIVE) {
@@ -403,12 +380,10 @@ public final class ConversationActivity extends BaseActivity implements Conversa
     }
 
     private void confirmDeleteConversation() {
-        Runnable remove = () -> new Thread(() -> {
-            try { SmsRepository.deleteThread(this, threadId); } catch (Exception ignored) { }
-            runOnUiThread(this::finish);
-        }, "delete-thread").start();
+        final android.content.Context app=getApplicationContext();final long thread=threadId;
+        Runnable remove=()->com.android.messaging.util.UiWork.run(this,()->{SmsRepository.deleteThread(app,thread);return true;},(activity,value,error)->{if(error==null)activity.finish();else Toast.makeText(activity,"Delete failed",Toast.LENGTH_LONG).show();});
         if (!AppPrefs.confirmDelete(this)) { remove.run(); return; }
-        new AlertDialog.Builder(this).setTitle("Delete conversation?")
+        new com.android.messaging.util.ScreenDialog.Builder(this).setTitle("Delete conversation?")
                 .setMessage("Deletes unlocked SMS/MMS from shared and private storage. Locked messages are kept.")
                 .setPositiveButton("Delete", (d, w) -> remove.run())
                 .setNegativeButton("Cancel", null).show();
@@ -420,18 +395,22 @@ public final class ConversationActivity extends BaseActivity implements Conversa
         if(replyId!=0)try{org.json.JSONObject draft=com.android.messaging.util.NotificationDrafts.latest(this,replyId);if(draft!=null){prefill=draft.optString("body");notificationDraftId=draft.getLong("_id");}}catch(Exception e){Toast.makeText(this,"Could not recover notification reply",Toast.LENGTH_LONG).show();}
         if(prefill==null)prefill = getIntent().getStringExtra("sms_body");
         if (prefill == null) prefill = getIntent().getStringExtra(Intent.EXTRA_TEXT);
-        String value = prefill != null ? prefill : AppPrefs.p(this).getString(AppPrefs.draftKey(threadId, address), "");
+        String value = prefill != null ? prefill : com.android.messaging.util.SessionDrafts.read(this,AppPrefs.draftKey(threadId,address));
         restoringDraft = true;
         compose.setText(value == null ? "" : value);
         if (compose.length() > 0) compose.setSelection(compose.length());
         restoringDraft = false;
     }
 
-    private void saveDraft() {
-        if (compose == null || restoringDraft || !com.android.messaging.security.Vault.unlocked()) return;
-        String key = AppPrefs.draftKey(threadId, address);
-        String value = compose.getText().toString();
-        if (value.trim().isEmpty()) AppPrefs.p(this).edit().remove(key).apply();
-        else AppPrefs.p(this).edit().putString(key, value).apply();
+    private void saveDraft(){draftHandler.removeCallbacks(persistDraft);draftHandler.postDelayed(persistDraft,500);}
+    private void flushDraft(){draftHandler.removeCallbacks(persistDraft);persistDraft();}
+    private void persistDraft(){
+        if(compose==null||restoringDraft||!com.android.messaging.security.Vault.unlocked())return;
+        String key=AppPrefs.draftKey(threadId,address),value=compose.getText().toString();final android.content.SharedPreferences preferences=AppPrefs.p(this);final android.content.Context app=getApplicationContext();
+        if(!com.android.messaging.util.SessionDrafts.remember(app,preferences,key,value))return;
+        com.android.messaging.util.UiWork.run(this,com.android.messaging.util.Workers.IO,()->{
+            if(!com.android.messaging.security.Vault.unlocked()||AppPrefs.p(app)!=preferences||!com.android.messaging.util.SessionDrafts.current(key,value))return false;
+            if(value.trim().isEmpty())preferences.edit().remove(key).apply();else preferences.edit().putString(key,value).apply();com.android.messaging.util.SessionDrafts.persisted(key,value);return true;
+        },(activity,saved,error)->{if(error!=null&&com.android.messaging.security.Vault.unlocked())Toast.makeText(activity,"Draft could not be saved",Toast.LENGTH_LONG).show();},ignored->{});
     }
 }
