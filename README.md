@@ -105,6 +105,33 @@ MMS transfers use temporary, seekable RAM-backed descriptors instead of plaintex
 
 ## Version history
 
+### SimpleSMS 1.4.7
+
+Performance
+- Thread deletion now gathers records once and removes message rows, related status rows, and chunks in batched database transactions. Shared SMS/MMS deletion is also batched. Locked messages are preserved.
+- Private message models, per-thread lists, and ID lookups are reused until encrypted records change, instead of rebuilding the entire private history for every lookup.
+- Reopening an already unlocked session no longer decrypts the database again.
+- Added an optional encrypted startup checkpoint. A valid checkpoint opens with one private-key operation; each entry is checked against the current database ciphertext before use. Missing, changed, or damaged entries use normal record decryption. Checkpoints are bounded to 32 MiB and written on a background worker after changes settle.
+- Cold reads use one ordered records/chunks query. Preference loading selects preference records directly.
+- Provider reconciliation runs in background maintenance after unlocking, rather than blocking every message-list read.
+
+Conversation display
+- Sending retains the existing adapter and visible history while the outgoing message and its status update. The thread is no longer replaced with an empty list after queuing a send.
+
+Notifications
+- Delete uses a separate transparent confirmation window, without opening the conversation list. With deletion confirmation disabled and app lock off, deletion runs directly in the background.
+- Added Settings > Mark as read notification button to replace Delete with Mark as read.
+- Direct actions carry only the message identifier and operation. App-lock authentication, message locks, and disabled-action settings remain enforced. Protected sessions still require authentication.
+
+Appearance
+- Added Settings > Dark background shade, with a preview slider from black (0) to gray (80).
+- Dark backgrounds, default incoming bubbles, and composer surfaces use the selected neutral gray. Existing custom message/background colors remain respected.
+- Returning screens refresh after changing the theme or gray value. Java/XML and the existing screen layout are retained.
+
+Storage and lifetime
+- Canonical encrypted database records and their encryption format are unchanged. The startup checkpoint is encrypted under the same storage key policy and kept in the no-backup directory; no plaintext checkpoint is written.
+- Locking drops the repository index, record hashes, and pending checkpoint task along with the existing decrypted session cache. Failed unlocks also clear partial session data. App-lock key transitions invalidate and rebuild the checkpoint.
+
 ### SimpleSMS 1.4.5
 
 - Reduce redundant conversation refreshes and avoid repeated encrypted-storage reads during normal browsing.
