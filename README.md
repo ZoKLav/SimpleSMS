@@ -274,7 +274,7 @@ Changes since 1.4.3:
 
 ## Licensing and attribution
 
-Project license: [No Faults Software License](https://github.com/ZoKLav/no_fault_license). AOSP-derived components retain their applicable license notices; the source package includes [LICENSE](LICENSE), [NOTICE-AOSP](NOTICE-AOSP) and [NOTICE-MMS](NOTICE-MMS).
+Project license: [No Faults Software License](https://github.com/ZoKLav/no_fault_license).
 
 Read the license terms and component notices before redistributing. The older AOSP notice describes the original SMS-only fork; current releases include carrier MMS support.
 
